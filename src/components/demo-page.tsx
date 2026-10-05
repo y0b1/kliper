@@ -17,7 +17,7 @@ export function DemoPage({ standalone = false }: { standalone?: boolean }) {
         )}
       </TopBar>
 
-      <h1 className="font-sign mt-10 text-[3rem] leading-[0.92] font-extrabold md:text-[4.5rem]">
+      <h1 className="font-sign mt-10 text-[3rem] leading-[1.05] font-extrabold md:text-[4.5rem]">
         Try your shop
         <br />
         on Kliper.
