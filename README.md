@@ -4,7 +4,13 @@ Book your barber in Davao: shop barbers, solo barbers and home-service cuts. A P
 
 ## Run it locally
 
-You need Node 20+, pnpm, and PostgreSQL 14+ (Postgres.app or `brew install postgresql@16`).
+On a Mac, one command does everything below (installs Postgres with Homebrew if it's missing, creates the database, seeds it and starts the app):
+
+```bash
+./scripts/setup.sh
+```
+
+Or step by step. You need Node 20+, pnpm, and PostgreSQL 14+ (Postgres.app or `brew install postgresql@16`).
 
 ```bash
 createdb kliper                      # or create it in Postgres.app
