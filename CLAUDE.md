@@ -40,7 +40,7 @@ Plaster-grey walls, walnut signboards for shop names only, barber-pole red (`#b8
 - `/` directory: free chairs today, barbershops (photo, name, rating, area; barbers are named only on the shop page), independent barbers
 - `/shop/[slug]` shop page, `/[slug]` barber page and booking flow, `/booking/[code]` confirmation
 - `/dashboard?barber=<slug>` barber dashboard (development preview)
-- `/demo` practice shop builder for barbers: cuts, add-ons, barbers, chairs and theme with a live preview. Client-only; the draft lives in the visitor's localStorage and never reaches the server.
+- `/demo` practice shop builder for barbers: cuts, add-ons, barbers with their working hours, chairs and theme, with a live preview whose booking times come from the real slot engine. Client-only; the draft lives in the visitor's localStorage and never reaches the server.
 
 Barber pages live at the root, so reserve `shop`, `dashboard`, `booking`, `demo` and other top-level route names when barber sign-up exists.
 
