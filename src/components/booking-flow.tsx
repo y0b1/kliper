@@ -1,9 +1,10 @@
 "use client";
 
 import { LocateFixed } from "lucide-react";
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { minutes, peso } from "@/lib/money";
 import { createBooking, getSlots, type BookingState, type SlotResult } from "@/server/actions";
+import { DayStrip, SlotGrid } from "./booking-pickers";
 import { Price, PriceBoard, type PriceBoardAddOn as AddOn, type PriceBoardPackage as Pkg } from "./price-board";
 
 interface Props {
@@ -50,19 +51,6 @@ export function BookingFlow(props: Props) {
     (locationType === "HOME" ? props.homeFeeCentavos : 0);
   const slot = result?.slots.find((s) => s.startsAt === startsAt);
   const dayLabel = props.dates.find((d) => d.iso === date)?.label;
-
-  // Group times into morning / afternoon / evening so a long day stays scannable.
-  const groups = useMemo(() => {
-    const out: Array<{ name: string; slots: NonNullable<typeof result>["slots"] }> = [];
-    for (const s of result?.slots ?? []) {
-      const [clock, meridiem] = s.label.split(" ");
-      const hour = Number(clock.split(":")[0]) % 12 + (meridiem === "PM" ? 12 : 0);
-      const name = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
-      if (out.at(-1)?.name !== name) out.push({ name, slots: [] });
-      out.at(-1)!.slots.push(s);
-    }
-    return out;
-  }, [result]);
 
   function toggleAddOn(id: string) {
     setAddOnIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
@@ -116,71 +104,18 @@ export function BookingFlow(props: Props) {
         <h2 id="when" className="page-display text-[1.75rem] font-bold">
           When
         </h2>
-        <div className="-mx-4 mt-3 flex gap-1 overflow-x-auto px-4 [scrollbar-width:none]" role="tablist" aria-label="Day">
-          {props.dates.map((d) => {
-            const on = d.iso === date;
-            return (
-              <button
-                key={d.iso}
-                type="button"
-                role="tab"
-                aria-selected={on}
-                aria-label={d.label}
-                onClick={() => setDate(d.iso)}
-                className="flex min-w-[3.75rem] flex-col items-center px-2 pb-2 pt-1.5"
-                style={{
-                  ...radius(0.5),
-                  background: on ? "var(--page-text)" : "transparent",
-                  color: on ? "var(--page-bg)" : "var(--page-text)",
-                }}
-              >
-                <span className="text-sm">{d.weekday}</span>
-                <span className="numeral text-[1.75rem] leading-none font-bold">{d.day}</span>
-              </button>
-            );
-          })}
-        </div>
+        <DayStrip dates={props.dates} selected={date} onPick={setDate} />
 
-        <div className={`mt-4 min-h-24 ${loading ? "opacity-40" : ""}`} aria-live="polite" aria-busy={loading}>
-          {groups.map((group) => (
-            <div key={group.name} className="mt-4 first:mt-0">
-              <h3 className="text-sm font-medium text-[var(--page-muted)]">{group.name}</h3>
-              <div className="mt-1.5 grid grid-cols-4 gap-1.5">
-                {group.slots.map((s) => {
-                  const on = s.startsAt === startsAt;
-                  const [clock, meridiem] = s.label.split(" ");
-                  return (
-                    <button
-                      key={s.startsAt}
-                      type="button"
-                      aria-pressed={on}
-                      aria-label={s.label}
-                      onClick={() => {
-                        setStartsAt(s.startsAt);
-                        setCheckout(false);
-                      }}
-                      className="numeral flex min-h-12 items-baseline justify-center gap-0.5 border-[1.5px] text-[1.375rem] font-bold"
-                      style={{
-                        ...radius(0.5),
-                        borderColor: on ? "var(--page-accent)" : "var(--page-border)",
-                        background: on ? "var(--page-accent)" : "var(--page-surface)",
-                        color: on ? "var(--page-on-accent)" : "var(--page-text)",
-                      }}
-                    >
-                      {clock}
-                      <span className="text-xs font-semibold">{meridiem}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-          {result && result.slots.length === 0 && (
-            <p className="py-3 text-[var(--page-muted)]">
-              No {minutes(duration)} openings on {dayLabel}. Try another day, or pick a shorter cut.
-            </p>
-          )}
-        </div>
+        <SlotGrid
+          slots={result?.slots ?? []}
+          selected={startsAt}
+          loading={loading}
+          onPick={(value) => {
+            setStartsAt(value);
+            setCheckout(false);
+          }}
+          empty={result ? `No ${minutes(duration)} openings on ${dayLabel}. Try another day, or pick a shorter cut.` : null}
+        />
       </section>
 
       {checkout && slot && pkg && (

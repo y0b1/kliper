@@ -1,8 +1,8 @@
 "use client";
 
 import { Minus, Plus, RotateCcw, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { DEMO_LIMITS, demoTotal, demoWarnings, parseDemo, sampleDemo, type DemoShop } from "@/lib/demo";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { DEMO_LIMITS, demoNextOpening, demoSlots, demoTotal, demoWarnings, parseDemo, sampleDemo, type DemoBarber, type DemoShop } from "@/lib/demo";
 import { minutes } from "@/lib/money";
 import {
   defaultTokens,
@@ -15,7 +15,9 @@ import {
   type ThemeTexture,
   type ThemeTokens,
 } from "@/lib/theme";
+import { addDays, formatManilaDate, formatMinuteOfDay, manilaDateOf, manilaWeekday } from "@/lib/time";
 import type { ShopCard } from "@/server/directory";
+import { DayStrip, SlotGrid } from "./booking-pickers";
 import { Price, PriceBoard } from "./price-board";
 import { ShopBlock } from "./shop-sign";
 
@@ -33,6 +35,100 @@ const textureLabel: Record<ThemeTexture, string> = {
 };
 
 const newId = () => Math.random().toString(36).slice(2, 10);
+
+const DEFAULT_HOURS = { days: [1, 2, 3, 4, 5, 6], startMin: 9 * 60, endMin: 18 * 60, breakTime: null } satisfies Partial<DemoBarber>;
+
+/** Monday first, the way a shop's week reads on the wall. 0 = Sunday. */
+const WEEK = [
+  [1, "Mon", "Mondays"],
+  [2, "Tue", "Tuesdays"],
+  [3, "Wed", "Wednesdays"],
+  [4, "Thu", "Thursdays"],
+  [5, "Fri", "Fridays"],
+  [6, "Sat", "Saturdays"],
+  [0, "Sun", "Sundays"],
+] as const;
+
+/** "Mon to Sat", "Every day", or "Tue, Thu, Sat". */
+function daysLabel(days: number[]) {
+  const ordered = WEEK.filter(([d]) => days.includes(d));
+  if (ordered.length === 7) return "Every day";
+  if (ordered.length === 0) return "No days yet";
+  const positions = ordered.map(([d]) => WEEK.findIndex(([w]) => w === d));
+  const contiguous = positions.every((p, i) => i === 0 || p === positions[i - 1] + 1);
+  if (contiguous && ordered.length >= 3) return `${ordered[0][1]} to ${ordered.at(-1)![1]}`;
+  return ordered.map(([, short]) => short).join(", ");
+}
+
+/** "Mon to Sat, 9:00 AM to 6:00 PM. Break 12:00 PM to 1:00 PM." */
+function hoursLabel(b: DemoBarber) {
+  const hours = `${daysLabel(b.days)}, ${formatMinuteOfDay(b.startMin)} to ${formatMinuteOfDay(b.endMin)}.`;
+  return b.breakTime ? `${hours} Break ${formatMinuteOfDay(b.breakTime.startMin)} to ${formatMinuteOfDay(b.breakTime.endMin)}.` : hours;
+}
+
+/** Minutes from midnight ⇄ the "HH:MM" a time input uses. */
+const toTimeValue = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+function fromTimeValue(value: string): number | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+function TimeField({ label, value, onChange }: { label: string; value: number; onChange: (min: number) => void }) {
+  return (
+    <label className="block w-36 shrink-0 text-sm font-medium">
+      {label}
+      <input
+        type="time"
+        step={900}
+        value={toTimeValue(value)}
+        onChange={(e) => {
+          const min = fromTimeValue(e.target.value);
+          if (min != null) onChange(min);
+        }}
+        className="field numeral text-lg font-bold"
+      />
+    </label>
+  );
+}
+
+/** When one barber takes appointments: working days, hours, and an optional break. */
+function BarberHours({ barber, onChange }: { barber: DemoBarber; onChange: (patch: Partial<DemoBarber>) => void }) {
+  const toggleDay = (day: number) => onChange({ days: barber.days.includes(day) ? barber.days.filter((d) => d !== day) : [...barber.days, day] });
+  const middle = Math.round((barber.startMin + barber.endMin) / 2 / 60) * 60;
+  return (
+    <div className="mt-3 sm:pl-14">
+      <fieldset>
+        <legend className="text-sm font-medium">Takes appointments on</legend>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {WEEK.map(([day, short, plural]) => (
+            <button key={day} type="button" aria-pressed={barber.days.includes(day)} aria-label={plural} onClick={() => toggleDay(day)} className="chip min-w-[3.25rem] justify-center px-2">
+              {short}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <TimeField label="From" value={barber.startMin} onChange={(startMin) => onChange({ startMin })} />
+        <TimeField label="Until" value={barber.endMin} onChange={(endMin) => onChange({ endMin })} />
+      </div>
+      <label className="mt-3 flex min-h-11 items-center gap-2.5 text-sm font-medium">
+        <input
+          type="checkbox"
+          checked={barber.breakTime != null}
+          onChange={(e) => onChange({ breakTime: e.target.checked ? { startMin: middle, endMin: middle + 60 } : null })}
+          className="size-5 accent-ink"
+        />
+        Takes a break, like lunch
+      </label>
+      {barber.breakTime && (
+        <div className="mt-1 flex flex-wrap items-end gap-2">
+          <TimeField label="Break from" value={barber.breakTime.startMin} onChange={(startMin) => onChange({ breakTime: { ...barber.breakTime!, startMin } })} />
+          <TimeField label="Back at" value={barber.breakTime.endMin} onChange={(endMin) => onChange({ breakTime: { ...barber.breakTime!, endMin } })} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function initials(name: string) {
   return (
@@ -209,45 +305,46 @@ export function DemoBuilder() {
             </div>
           </Section>
 
-          <Section id="barbers" title="Barbers" hint="Everyone who cuts at your shop. Each gets their own booking page.">
+          <Section id="barbers" title="Barbers" hint="Everyone who cuts at your shop, and when each one takes appointments. Customers can only book these hours.">
             <ul className="divide-y divide-rule border-y border-rule">
-              {demo.barbers.map((barber, i) => (
-                <li key={barber.id} className="flex items-start gap-3 py-3">
-                  <span
-                    aria-hidden
-                    className="mt-7 grid size-11 shrink-0 place-items-center rounded-full font-semibold"
-                    style={{ background: theme.cssProperties["--page-accent"], color: theme.cssProperties["--page-on-accent"] }}
-                  >
-                    {initials(barber.name)}
-                  </span>
-                  <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
-                    <label className="block text-sm font-medium">
-                      Name
-                      <input
-                        className="field"
-                        maxLength={DEMO_LIMITS.text}
-                        value={barber.name}
-                        onChange={(e) => set({ barbers: demo.barbers.map((b, j) => (j === i ? { ...b, name: e.target.value } : b)) })}
-                      />
-                    </label>
-                    <label className="block text-sm font-medium">
-                      Good at
-                      <input
-                        className="field"
-                        maxLength={DEMO_LIMITS.text}
-                        value={barber.specialties}
-                        placeholder="Fades, Kids, Beard"
-                        onChange={(e) => set({ barbers: demo.barbers.map((b, j) => (j === i ? { ...b, specialties: e.target.value } : b)) })}
-                      />
-                    </label>
-                  </div>
-                  <RemoveButton label={`Remove ${barber.name || "this barber"}`} onClick={() => set({ barbers: demo.barbers.filter((_, j) => j !== i) })} />
-                </li>
-              ))}
+              {demo.barbers.map((barber, i) => {
+                const update = (patch: Partial<DemoBarber>) => set({ barbers: demo.barbers.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
+                return (
+                  <li key={barber.id} className="py-4">
+                    <div className="flex items-start gap-3">
+                      <span
+                        aria-hidden
+                        className="mt-7 grid size-11 shrink-0 place-items-center rounded-full font-semibold"
+                        style={{ background: theme.cssProperties["--page-accent"], color: theme.cssProperties["--page-on-accent"] }}
+                      >
+                        {initials(barber.name)}
+                      </span>
+                      <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
+                        <label className="block text-sm font-medium">
+                          Name
+                          <input className="field" maxLength={DEMO_LIMITS.text} value={barber.name} onChange={(e) => update({ name: e.target.value })} />
+                        </label>
+                        <label className="block text-sm font-medium">
+                          Good at
+                          <input
+                            className="field"
+                            maxLength={DEMO_LIMITS.text}
+                            value={barber.specialties}
+                            placeholder="Fades, Kids, Beard"
+                            onChange={(e) => update({ specialties: e.target.value })}
+                          />
+                        </label>
+                      </div>
+                      <RemoveButton label={`Remove ${barber.name || "this barber"}`} onClick={() => set({ barbers: demo.barbers.filter((_, j) => j !== i) })} />
+                    </div>
+                    <BarberHours barber={barber} onChange={update} />
+                  </li>
+                );
+              })}
             </ul>
             <AddButton
               disabled={demo.barbers.length >= DEMO_LIMITS.barbers}
-              onClick={() => set({ barbers: [...demo.barbers, { id: newId(), name: "", specialties: "" }] })}
+              onClick={() => set({ barbers: [...demo.barbers, { id: newId(), name: "", specialties: "", ...DEFAULT_HOURS }] })}
             >
               Add a barber
             </AddButton>
@@ -442,14 +539,48 @@ export function DemoBuilder() {
 }
 
 function DemoPreview({ demo, theme }: { demo: DemoShop; theme: ReturnType<typeof resolveTheme> }) {
+  const [now] = useState(() => new Date());
+  const [barberId, setBarberId] = useState("");
   const [cutId, setCutId] = useState("");
   const [addOnIds, setAddOnIds] = useState<string[]>([]);
+  const [date, setDate] = useState<string | null>(null);
+  const [startsAt, setStartsAt] = useState<string | null>(null);
+  const [booked, setBooked] = useState(false);
+  const bookingRef = useRef<HTMLDivElement>(null);
   const warnings = demoWarnings(demo);
 
-  // Keep the picked cut valid as cuts are added and removed.
+  // Keep picks valid as the barber edits: removed cuts, barbers or add-ons fall back.
+  const barber = demo.barbers.find((b) => b.id === barberId) ?? demo.barbers[0];
   const pickedCut = demo.cuts.some((c) => c.id === cutId) ? cutId : (demo.cuts[0]?.id ?? "");
   const pickedAddOns = addOnIds.filter((id) => demo.addOns.some((a) => a.id === id));
   const total = demoTotal(demo, pickedCut, pickedAddOns);
+
+  // Shop page "next free" times use each barber's quickest cut, like real shop pages.
+  const quickest = Math.min(...demo.cuts.map((c) => c.durationMin).filter((m) => m > 0));
+  const nextFor = (b: DemoBarber) => (Number.isFinite(quickest) ? demoNextOpening(b, quickest, now) : null);
+
+  const today = manilaDateOf(now);
+  const dates = Array.from({ length: 7 }, (_, i) => {
+    const iso = addDays(today, i);
+    return { iso, weekday: i === 0 ? "Today" : formatManilaDate(iso).split(",")[0], day: String(Number(iso.slice(8))), label: formatManilaDate(iso) };
+  });
+  const dayWord = (iso: string) => (iso === today ? "today" : iso === addDays(today, 1) ? "tomorrow" : formatManilaDate(iso).split(",")[0]);
+
+  // Open on the selected barber's first free day until the visitor picks one.
+  const shownDate = date ?? (barber ? nextFor(barber)?.date : null) ?? today;
+  const slots = barber && total.durationMin > 0 ? demoSlots(barber, shownDate, total.durationMin, now) : [];
+  const pickerSlots = slots.map((sl) => ({ startsAt: sl.startsAt.toISOString(), label: sl.label }));
+  const pickedSlot = pickerSlots.find((sl) => sl.startsAt === startsAt) ?? null;
+  const dayOff = barber && !barber.days.includes(manilaWeekday(shownDate));
+  const barberName = barber?.name.trim() || "Your barber";
+
+  function chooseBarber(id: string) {
+    setBarberId(id);
+    setDate(null);
+    setStartsAt(null);
+    setBooked(false);
+    bookingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const name = demo.name.trim() || "Your shop";
   const card: ShopCard = {
@@ -469,7 +600,6 @@ function DemoPreview({ demo, theme }: { demo: DemoShop; theme: ReturnType<typeof
     barbers: [],
   };
   const pageStyle = { ...(theme.cssProperties as CSSProperties), borderRadius: "calc(var(--page-radius) * 1.25)" };
-  const firstBarber = demo.barbers.find((b) => b.name.trim())?.name.trim() ?? "Your barber";
 
   return (
     <div aria-label="Preview" role="region">
@@ -489,59 +619,116 @@ function DemoPreview({ demo, theme }: { demo: DemoShop; theme: ReturnType<typeof
         <ShopBlock shop={card} linked={false} />
       </div>
 
-      <p className="mt-8 text-sm font-medium text-ink-soft">Your shop page</p>
-      <div className="page-shell mt-2 min-h-0! overflow-hidden border border-rule px-4 pb-5 pt-4" style={pageStyle} inert>
+      <p className="mt-8 text-sm font-medium text-ink-soft">Your shop page. Tap a barber to book with them.</p>
+      <div className="page-shell mt-2 min-h-0! overflow-hidden border border-rule px-4 pb-5 pt-4" style={pageStyle}>
         <div className="sign-themed px-4 pb-3 pt-4">
           <p className="page-display text-[2.25rem] leading-[0.92] font-bold break-words">{name}</p>
         </div>
-        <p className="mt-3 font-medium">
-          {[demo.address.trim(), demo.area.trim()].filter(Boolean).join(", ") || "Your address"}
-        </p>
+        <p className="mt-3 font-medium">{[demo.address.trim(), demo.area.trim()].filter(Boolean).join(", ") || "Your address"}</p>
         <p className="text-sm text-[var(--page-muted)]">
           {demo.chairs} {demo.chairs === 1 ? "chair" : "chairs"}, {demo.barbers.length} {demo.barbers.length === 1 ? "barber" : "barbers"}
         </p>
         <p className="page-display mt-5 text-[1.4rem] font-bold">Pick a barber</p>
         <ul className="mt-1 divide-y" style={{ borderColor: "var(--page-border)" }}>
-          {demo.barbers.map((b) => (
-            <li key={b.id} className="flex items-center gap-3 py-3" style={{ borderColor: "var(--page-border)" }}>
-              <span
-                aria-hidden
-                className="grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold"
-                style={{ background: "var(--page-accent)", color: "var(--page-on-accent)", fontFamily: "var(--page-font-display)" }}
-              >
-                {initials(b.name)}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate font-semibold">{b.name.trim() || "Barber name"}</span>
-                {b.specialties.trim() && <span className="block truncate text-sm text-[var(--page-muted)]">{b.specialties}</span>}
-              </span>
-            </li>
-          ))}
+          {demo.barbers.map((b) => {
+            const next = nextFor(b);
+            const [clock, meridiem] = next ? next.slot.label.split(" ") : [null, null];
+            const on = b.id === barber?.id;
+            return (
+              <li key={b.id} style={{ borderColor: "var(--page-border)" }}>
+                <button
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => chooseBarber(b.id)}
+                  className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-3 px-2 py-3 text-left"
+                  style={{ borderRadius: "calc(var(--page-radius) * 0.5)", background: on ? "rgb(127 127 127 / 0.12)" : "transparent" }}
+                >
+                  <span
+                    aria-hidden
+                    className="grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold"
+                    style={{ background: "var(--page-accent)", color: "var(--page-on-accent)", fontFamily: "var(--page-font-display)" }}
+                  >
+                    {initials(b.name)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">{b.name.trim() || "Barber name"}</span>
+                    {b.specialties.trim() && <span className="block truncate text-sm text-[var(--page-muted)]">{b.specialties}</span>}
+                  </span>
+                  <span className="shrink-0 text-right" aria-label={next ? `Next opening ${dayWord(next.date)} ${next.slot.label}` : "No openings this week"}>
+                    {next ? (
+                      <>
+                        <span className="numeral block text-[1.6rem] leading-none font-bold">
+                          {clock}
+                          <span className="ml-0.5 text-sm font-semibold">{meridiem}</span>
+                        </span>
+                        <span className="text-sm" style={{ color: next.date === today ? "var(--page-accent)" : "var(--page-muted)" }}>
+                          {dayWord(next.date)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-sm text-[var(--page-muted)]">Booked up</span>
+                    )}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       </div>
 
-      <p className="mt-8 text-sm font-medium text-ink-soft">Booking page. Try picking a cut and add-ons.</p>
-      <div className="page-shell mt-2 min-h-0! overflow-hidden border border-rule px-4 pb-5 pt-4" style={pageStyle}>
-        <p className="page-display text-[2.25rem] leading-[0.92] font-bold break-words">{firstBarber}</p>
-        {demo.cuts.length > 0 ? (
+      <p className="mt-8 text-sm font-medium text-ink-soft">Booking page. Pick a cut, add-ons and a time.</p>
+      <div ref={bookingRef} className="page-shell mt-2 min-h-0! scroll-mt-4 overflow-hidden border border-rule px-4 pb-5 pt-4" style={pageStyle}>
+        <p className="page-display text-[2.25rem] leading-[0.92] font-bold break-words">{barberName}</p>
+        {barber && <p className="mt-2 text-sm text-[var(--page-muted)]">{hoursLabel(barber)}</p>}
+        {demo.cuts.length > 0 && barber ? (
           <>
             <PriceBoard
               packages={demo.cuts.map((c) => ({ ...c, name: c.name.trim() || "Unnamed cut", description: c.description.trim() || null }))}
               addOns={demo.addOns.map((a) => ({ ...a, name: a.name.trim() || "Unnamed add-on" }))}
               packageId={pickedCut}
               addOnIds={pickedAddOns}
-              onPick={setCutId}
-              onToggleAddOn={(id) => setAddOnIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]))}
+              onPick={(id) => (setCutId(id), setBooked(false))}
+              onToggleAddOn={(id) => (setAddOnIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id])), setBooked(false))}
             />
-            <p className="mt-4 flex items-baseline justify-between gap-3">
-              <span className="text-[var(--page-muted)]">{minutes(total.durationMin)} in the chair</span>
-              <span className="text-[2rem] leading-none">
-                <Price centavos={total.priceCentavos} />
-              </span>
-            </p>
+
+            <section aria-labelledby="demo-when" className="mt-8">
+              <h2 id="demo-when" className="page-display text-[1.75rem] font-bold">
+                When
+              </h2>
+              <DayStrip dates={dates} selected={shownDate} onPick={(iso) => (setDate(iso), setStartsAt(null), setBooked(false))} />
+              <SlotGrid
+                slots={pickerSlots}
+                selected={pickedSlot?.startsAt ?? null}
+                onPick={(value) => (setStartsAt(value), setBooked(false))}
+                empty={
+                  dayOff
+                    ? `${barberName} doesn't take appointments on ${WEEK.find(([d]) => d === manilaWeekday(shownDate))![2]}. Try another day.`
+                    : `No ${minutes(total.durationMin)} openings on ${formatManilaDate(shownDate)}. Try another day, or a shorter cut.`
+                }
+              />
+            </section>
+
+            <div className="mt-6 flex items-center justify-between gap-4 rounded-lg bg-paper px-4 py-3 text-ink">
+              <div className="min-w-0">
+                <p className="text-[1.75rem] leading-none">
+                  <Price centavos={total.priceCentavos} />
+                </p>
+                <p className="mt-1 truncate text-sm text-ink-soft">
+                  {pickedSlot ? `${formatManilaDate(shownDate)}, ${pickedSlot.label}` : `${minutes(total.durationMin)} in the chair`}
+                </p>
+              </div>
+              <button type="button" disabled={!pickedSlot} onClick={() => setBooked(true)} className="btn btn-ink shrink-0">
+                {pickedSlot ? "Book" : "Pick a time"}
+              </button>
+            </div>
+            {booked && pickedSlot && (
+              <p className="mt-3 text-sm" role="status">
+                This is the demo, so nothing was booked. A customer would now confirm with their phone number and get a booking code.
+              </p>
+            )}
           </>
         ) : (
-          <p className="mt-4 text-[var(--page-muted)]">Add a cut to see your price board.</p>
+          <p className="mt-4 text-[var(--page-muted)]">{barber ? "Add a cut to see your price board." : "Add a barber to see their booking page."}</p>
         )}
       </div>
     </div>

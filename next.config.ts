@@ -3,7 +3,8 @@ import type { NextConfig } from "next";
 /**
  * `KLIPER_BUILD=demo` builds the static barber demo for kliper-demo.peur.ph: only
  * `*.demo.tsx` files count as routes (the demo at "/" and the root layout), and the
- * output is plain files in `.next-demo/` with no server or database.
+ * output is plain files in `.next-demo/` with no server or database. The build still
+ * rewrites .next/types for its one route, so `build:demo` runs `next typegen` after it.
  */
 const demo = process.env.KLIPER_BUILD === "demo";
 

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:demo": "KLIPER_BUILD=demo next build",
+    "build:demo": "KLIPER_BUILD=demo next build && next typegen",
     "deploy:demo": "pnpm build:demo && pnpm dlx wrangler@4 deploy",
     "start": "next start",
     "lint": "eslint",

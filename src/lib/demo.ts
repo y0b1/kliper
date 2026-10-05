@@ -4,7 +4,9 @@
  * the server or shown to customers.
  */
 import { z } from "zod";
+import { findSlots, type Slot, type WeeklyBlock } from "./slots";
 import { defaultTokens, themePresetIdSchema, validateThemeRead, type ThemePresetId, type ThemeTokens } from "./theme";
+import { addDays, manilaDateOf } from "./time";
 
 export const DEMO_LIMITS = {
   text: 60,
@@ -19,6 +21,7 @@ export const DEMO_LIMITS = {
 } as const;
 
 const text = z.string().max(DEMO_LIMITS.text);
+const minuteOfDay = z.number().int().min(0).max(24 * 60);
 const centavos = z.number().int().min(0).max(DEMO_LIMITS.priceCentavos);
 
 const demoSchema = z.object({
@@ -26,7 +29,20 @@ const demoSchema = z.object({
   address: text,
   area: text,
   chairs: z.number().int().min(DEMO_LIMITS.chairs.min).max(DEMO_LIMITS.chairs.max),
-  barbers: z.array(z.object({ id: z.string(), name: text, specialties: text })).max(DEMO_LIMITS.barbers),
+  barbers: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: text,
+        specialties: text,
+        // Defaults keep drafts saved before hours existed instead of resetting them.
+        days: z.array(z.number().int().min(0).max(6)).max(7).default([1, 2, 3, 4, 5, 6]),
+        startMin: minuteOfDay.default(9 * 60),
+        endMin: minuteOfDay.default(18 * 60),
+        breakTime: z.object({ startMin: minuteOfDay, endMin: minuteOfDay }).nullable().default(null),
+      }),
+    )
+    .max(DEMO_LIMITS.barbers),
   cuts: z
     .array(
       z.object({
@@ -51,12 +67,25 @@ const demoSchema = z.object({
   theme: z.object({ preset: themePresetIdSchema, tokens: z.unknown() }),
 });
 
+/** One barber's week: the same hours on every working day, with an optional break. */
+export interface DemoBarber {
+  id: string;
+  name: string;
+  specialties: string;
+  /** Working weekdays, 0 = Sunday. */
+  days: number[];
+  /** Minutes from local midnight, Asia/Manila. */
+  startMin: number;
+  endMin: number;
+  breakTime: { startMin: number; endMin: number } | null;
+}
+
 export interface DemoShop {
   name: string;
   address: string;
   area: string;
   chairs: number;
-  barbers: Array<{ id: string; name: string; specialties: string }>;
+  barbers: DemoBarber[];
   cuts: Array<{ id: string; name: string; priceCentavos: number; durationMin: number; description: string }>;
   addOns: Array<{ id: string; name: string; priceCentavos: number; durationMin: number }>;
   theme: { preset: ThemePresetId; tokens: ThemeTokens };
@@ -69,8 +98,8 @@ export const sampleDemo: DemoShop = {
   area: "Poblacion",
   chairs: 3,
   barbers: [
-    { id: "b1", name: "You", specialties: "Fades, Line-ups" },
-    { id: "b2", name: "Second barber", specialties: "Classic cuts, Kids" },
+    { id: "b1", name: "You", specialties: "Fades, Line-ups", days: [1, 2, 3, 4, 5, 6], startMin: 9 * 60, endMin: 18 * 60, breakTime: { startMin: 12 * 60, endMin: 13 * 60 } },
+    { id: "b2", name: "Second barber", specialties: "Classic cuts, Kids", days: [0, 2, 3, 4, 5, 6], startMin: 10 * 60, endMin: 19 * 60, breakTime: null },
   ],
   cuts: [
     { id: "c1", name: "Basic cut", priceCentavos: 15_000, durationMin: 30, description: "Scissor or clipper cut, styled." },
@@ -105,6 +134,12 @@ export function demoWarnings(demo: DemoShop): string[] {
   if (demo.addOns.some((a) => !a.name.trim())) warnings.push("One of your add-ons has no name.");
   if (demo.barbers.length === 0) warnings.push("Add at least one barber.");
   if (demo.barbers.some((b) => !b.name.trim())) warnings.push("One of your barbers has no name.");
+  for (const b of demo.barbers) {
+    const who = b.name.trim() || "One barber";
+    if (b.days.length === 0) warnings.push(`${who} has no working days, so customers can't book them.`);
+    else if (b.endMin <= b.startMin) warnings.push(`${who}'s hours end before they start.`);
+    else if (b.breakTime && !validBreak(b)) warnings.push(`${who}'s break has to fit inside their hours.`);
+  }
   if (demo.barbers.length > demo.chairs)
     warnings.push(`${demo.barbers.length} barbers and ${demo.chairs} ${demo.chairs === 1 ? "chair" : "chairs"}. Fine if they work different shifts.`);
   return warnings;
@@ -118,4 +153,40 @@ export function demoTotal(demo: DemoShop, cutId: string, addOnIds: string[]): { 
     priceCentavos: (cut?.priceCentavos ?? 0) + addOns.reduce((sum, a) => sum + a.priceCentavos, 0),
     durationMin: (cut?.durationMin ?? 0) + addOns.reduce((sum, a) => sum + a.durationMin, 0),
   };
+}
+
+function validBreak(b: DemoBarber): boolean {
+  const br = b.breakTime;
+  return br != null && br.endMin > br.startMin && br.startMin > b.startMin && br.endMin < b.endMin;
+}
+
+/** The barber's week as the slot engine's working blocks. A break splits each day in two. */
+export function demoSchedule(b: DemoBarber): WeeklyBlock[] {
+  if (b.endMin <= b.startMin) return [];
+  const ranges = validBreak(b)
+    ? [
+        { startMin: b.startMin, endMin: b.breakTime!.startMin },
+        { startMin: b.breakTime!.endMin, endMin: b.endMin },
+      ]
+    : [{ startMin: b.startMin, endMin: b.endMin }];
+  return [...new Set(b.days)].sort().flatMap((weekday) => ranges.map((r) => ({ weekday, ...r })));
+}
+
+/**
+ * Open start times for one Manila date, from the same slot engine real booking
+ * pages use (15-minute grid, 30 minutes' notice). The demo has no bookings yet.
+ */
+export function demoSlots(b: DemoBarber, date: string, durationMin: number, now: Date): Slot[] {
+  return findSlots({ date, durationMin, schedule: demoSchedule(b), bookings: [], timeOff: [], now, minLeadMin: 30 });
+}
+
+/** The barber's first open time in the next week, for their quickest cut. */
+export function demoNextOpening(b: DemoBarber, durationMin: number, now: Date): { date: string; slot: Slot } | null {
+  const today = manilaDateOf(now);
+  for (let offset = 0; offset < 7; offset += 1) {
+    const date = addDays(today, offset);
+    const slot = demoSlots(b, date, durationMin, now)[0];
+    if (slot) return { date, slot };
+  }
+  return null;
 }
