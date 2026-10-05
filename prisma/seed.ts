@@ -1,6 +1,7 @@
 /**
  * Sample Davao data for local development. Every shop and barber here is made up;
- * locations are approximate neighborhood centers, not real addresses.
+ * locations are approximate neighborhood centers, not real addresses. Shop photos
+ * and logos live in public/samples/shops (photo credits in CREDITS.md there).
  */
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -12,10 +13,10 @@ const H = (h: number, m = 0) => h * 60 + m;
 const P = (pesos: number) => pesos * 100;
 
 const shops = [
-  { slug: "ironwood-barbers", name: "Ironwood Barbers", address: "JP Laurel Ave, Lanang", barangay: "Lanang", lat: 7.1003, lng: 125.6318, themePreset: "woodshop" },
-  { slug: "kanto-cuts", name: "Kanto Cuts", address: "MacArthur Hwy, Matina", barangay: "Matina", lat: 7.0612, lng: 125.597, themePreset: "kanto" },
-  { slug: "pole-and-pomade", name: "Pole & Pomade", address: "Dacudao Ave, Bo. Obrero", barangay: "Obrero", lat: 7.0824, lng: 125.6112, themePreset: "classic-pole" },
-  { slug: "the-fade-lab", name: "The Fade Lab", address: "JP Laurel Ave, Bajada", barangay: "Bajada", lat: 7.0872, lng: 125.6108, themePreset: "neon-fade" },
+  { slug: "ironwood-barbers", name: "Ironwood Barbers", address: "JP Laurel Ave, Lanang", barangay: "Lanang", lat: 7.1003, lng: 125.6318, themePreset: "woodshop", imageUrl: "/samples/shops/ironwood-barbers.jpg", logoUrl: "/samples/shops/logos/ironwood-barbers.svg" },
+  { slug: "kanto-cuts", name: "Kanto Cuts", address: "MacArthur Hwy, Matina", barangay: "Matina", lat: 7.0612, lng: 125.597, themePreset: "kanto", imageUrl: "/samples/shops/kanto-cuts.jpg", logoUrl: "/samples/shops/logos/kanto-cuts.svg" },
+  { slug: "pole-and-pomade", name: "Pole & Pomade", address: "Dacudao Ave, Bo. Obrero", barangay: "Obrero", lat: 7.0824, lng: 125.6112, themePreset: "classic-pole", imageUrl: "/samples/shops/pole-and-pomade.jpg", logoUrl: "/samples/shops/logos/pole-and-pomade.svg" },
+  { slug: "the-fade-lab", name: "The Fade Lab", address: "JP Laurel Ave, Bajada", barangay: "Bajada", lat: 7.0872, lng: 125.6108, themePreset: "neon-fade", imageUrl: "/samples/shops/the-fade-lab.jpg", logoUrl: "/samples/shops/logos/the-fade-lab.svg" },
 ];
 
 type Seed = {
@@ -35,6 +36,8 @@ type Seed = {
   addOns: Array<[name: string, pesos: number, minutes: number]>;
   days: number[];
   hours: Array<[start: number, end: number]>;
+  /** Stars from past reviews, newest first. Each gets its own completed booking. */
+  reviews: number[];
 };
 
 const barbers: Seed[] = [
@@ -56,6 +59,7 @@ const barbers: Seed[] = [
     addOns: [["Beard trim", 80, 15], ["Hot towel", 50, 10]],
     days: [1, 2, 3, 4, 5, 6],
     hours: [[H(9), H(12)], [H(13), H(19)]],
+    reviews: [5, 5, 4, 5, 5, 4, 5],
   },
   {
     slug: "marco",
@@ -72,6 +76,7 @@ const barbers: Seed[] = [
     addOns: [["Beard sculpt", 120, 20], ["Scalp massage", 80, 10]],
     days: [2, 3, 4, 5, 6, 0],
     hours: [[H(10), H(14)], [H(15), H(20)]],
+    reviews: [5, 4, 5, 5],
   },
   {
     slug: "bea",
@@ -90,6 +95,7 @@ const barbers: Seed[] = [
     addOns: [["Treatment", 300, 20], ["Blow-dry styling", 150, 20]],
     days: [1, 2, 3, 4, 5, 6],
     hours: [[H(10), H(18)]],
+    reviews: [5, 5, 5, 4, 5],
   },
   {
     slug: "rj",
@@ -109,6 +115,7 @@ const barbers: Seed[] = [
     addOns: [["Eyebrow slit", 30, 5], ["Hair tattoo", 150, 20]],
     days: [3, 4, 5, 6, 0],
     hours: [[H(13), H(22)]],
+    reviews: [4, 5, 4, 4, 5, 3],
   },
   {
     slug: "tonyo",
@@ -126,6 +133,7 @@ const barbers: Seed[] = [
     addOns: [["Hair wash", 40, 10]],
     days: [0, 1, 2, 3, 4, 5, 6],
     hours: [[H(8), H(12)], [H(13), H(18)]],
+    reviews: [5, 4, 4, 5, 4, 5, 4, 5],
   },
   {
     slug: "migs",
@@ -141,6 +149,7 @@ const barbers: Seed[] = [
     addOns: [["Beard line-up", 50, 10]],
     days: [1, 2, 3, 4, 5],
     hours: [[H(9), H(17)]],
+    reviews: [4, 4, 5],
   },
   {
     slug: "ate-lyn",
@@ -160,6 +169,7 @@ const barbers: Seed[] = [
     addOns: [["Extra person", 180, 30]],
     days: [1, 2, 3, 4, 5, 6],
     hours: [[H(9), H(17)]],
+    reviews: [5, 5, 5, 5],
   },
   {
     slug: "paolo",
@@ -178,6 +188,7 @@ const barbers: Seed[] = [
     addOns: [["Hot towel shave", 200, 20], ["Styling", 100, 10]],
     days: [2, 3, 4, 5, 6],
     hours: [[H(10), H(19)]],
+    reviews: [],
   },
 ];
 
@@ -188,6 +199,7 @@ function code() {
 
 async function main() {
   await db.$transaction([
+    db.review.deleteMany(),
     db.bookingAddOn.deleteMany(),
     db.booking.deleteMany(),
     db.timeOff.deleteMany(),
@@ -282,6 +294,26 @@ async function main() {
           priceCentavos: pkg.priceCentavos,
           locationType: seed.home && !seed.shop && seed.slug === "ate-lyn" ? "HOME" : "SHOP",
           address: seed.slug === "ate-lyn" ? "Sample address, Buhangin" : null,
+        },
+      });
+    }
+
+    // Past completed bookings, one review each, a day apart going back from yesterday.
+    for (const [i, stars] of seed.reviews.entries()) {
+      const startsAt = atManilaMinute(addDays(today, -(i + 1)), H(10));
+      const customer = customers[i % customers.length];
+      await db.booking.create({
+        data: {
+          code: code(),
+          barberId: barber.id,
+          shopId: seed.shop ? shopIds.get(seed.shop) : null,
+          customerId: customer.id,
+          packageId: pkg.id,
+          startsAt,
+          endsAt: new Date(startsAt.getTime() + pkg.durationMin * 60_000),
+          status: "COMPLETED",
+          priceCentavos: pkg.priceCentavos,
+          review: { create: { barberId: barber.id, customerId: customer.id, stars } },
         },
       });
     }

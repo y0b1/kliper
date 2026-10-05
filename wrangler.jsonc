@@ -1,0 +1,12 @@
+// Cloudflare Worker serving the static barber demo (pnpm build:demo writes ./.next-demo).
+// Deploy with `pnpm deploy:demo`. The kliper-demo.peur.ph domain is attached in the
+// Cloudflare dashboard (Workers > kliper-demo > Settings > Domains & Routes).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kliper-demo",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./.next-demo",
+    "not_found_handling": "404-page"
+  }
+}

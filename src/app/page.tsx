@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DemoButton } from "@/components/demo-button";
 import { DirectoryList } from "@/components/directory-list";
 import { TopBar } from "@/components/top-bar";
 import { listDirectory } from "@/server/barbers";
@@ -10,7 +11,7 @@ export default async function DirectoryPage() {
   const directory = toDirectory(await listDirectory());
 
   return (
-    <main className="mx-auto max-w-xl px-4 pb-24 pt-[max(1rem,env(safe-area-inset-top))] md:max-w-4xl md:px-8">
+    <main className="mx-auto max-w-xl px-4 pb-32 pt-[max(1rem,env(safe-area-inset-top))] md:max-w-4xl md:px-8">
       <TopBar>
         <Link href="/dashboard" className="underline-offset-4 hover:underline">
           For barbers
@@ -27,6 +28,7 @@ export default async function DirectoryPage() {
       </p>
 
       <DirectoryList initial={directory} />
+      <DemoButton />
     </main>
   );
 }

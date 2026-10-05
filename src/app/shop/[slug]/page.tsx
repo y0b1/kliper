@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { CSSProperties } from "react";
 import { ArrowLeft } from "lucide-react";
+import { DemoButton } from "@/components/demo-button";
 import { Wordmark } from "@/components/top-bar";
 import { peso } from "@/lib/money";
 import { resolveCardChrome, resolveTheme } from "@/lib/theme";
@@ -55,7 +57,7 @@ export default async function ShopPage(props: PageProps<"/shop/[slug]">) {
 
   return (
     <div className="page-shell" style={theme.cssProperties as CSSProperties}>
-      <main className="mx-auto max-w-xl px-4 pb-16 pt-[max(1rem,env(safe-area-inset-top))]">
+      <main className="mx-auto max-w-xl px-4 pb-32 pt-[max(1rem,env(safe-area-inset-top))]">
         <header className="flex min-h-12 items-center">
           <Link href="/" className="-ml-2 inline-flex min-h-11 items-center gap-1.5 rounded-md px-2 font-medium">
             <ArrowLeft size={20} strokeWidth={2} aria-hidden />
@@ -63,8 +65,16 @@ export default async function ShopPage(props: PageProps<"/shop/[slug]">) {
           </Link>
         </header>
 
-        <div className="sign-themed mt-8 px-5 pb-4 pt-5">
-          <h1 className="page-display text-[3rem] leading-[0.92] font-bold">{shop.name}</h1>
+        {shop.imageUrl && (
+          <div className="relative mt-6 aspect-[3/2] overflow-hidden" style={{ borderRadius: "var(--page-radius)" }}>
+            <Image src={shop.imageUrl} alt="" fill preload sizes="(min-width: 36rem) 36rem, 100vw" className="object-cover" />
+          </div>
+        )}
+        <div className={`sign-themed relative flex items-center gap-4 px-5 pb-4 pt-5 ${shop.imageUrl ? "mx-3 -mt-12 shadow-md" : "mt-8"}`}>
+          <h1 className="page-display min-w-0 flex-1 text-[3rem] leading-[0.92] font-bold">{shop.name}</h1>
+          {shop.logoUrl && (
+            <Image src={shop.logoUrl} alt={`${shop.name} logo`} width={72} height={72} className="size-[4.5rem] shrink-0" />
+          )}
         </div>
         <p className="mt-4 font-medium">
           {shop.address}
@@ -124,6 +134,7 @@ export default async function ShopPage(props: PageProps<"/shop/[slug]">) {
           </Link>
         </footer>
       </main>
+      <DemoButton />
     </div>
   );
 }
