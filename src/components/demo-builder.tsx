@@ -486,7 +486,7 @@ function DemoPreview({ demo, theme }: { demo: DemoShop; theme: ReturnType<typeof
 
       <p className="text-sm font-medium text-ink-soft">On the Kliper homepage</p>
       <div className="mt-2" inert>
-        <ShopBlock shop={card} />
+        <ShopBlock shop={card} linked={false} />
       </div>
 
       <p className="mt-8 text-sm font-medium text-ink-soft">Your shop page</p>
