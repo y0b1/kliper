@@ -1,26 +1,138 @@
 @import "tailwindcss";
 
+/*
+ * Kliper platform look: wood and concrete, in the soft-card style of the
+ * reference UI (big light titles, pill buttons, one dark card, one highlight).
+ * Barber pages use their own --page-* variables from the theme system instead.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --font-outfit: "Outfit Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-oswald: "Oswald Variable", "Arial Narrow", sans-serif;
+  --font-playfair: "Playfair Display Variable", Georgia, serif;
+  --font-space-mono: "Space Mono", ui-monospace, monospace;
+  --font-bebas: "Bebas Neue", "Arial Narrow", sans-serif;
+  --font-righteous: "Righteous", ui-sans-serif, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@theme {
+  --font-sans: var(--font-outfit);
+  --font-display: var(--font-oswald);
+
+  --color-canvas: #e7e4df;
+  --color-card: #f7f5f1;
+  --color-line: #dcd6cd;
+  --color-ink: #1f1b18;
+  --color-muted: #6b625a;
+  --color-walnut: #2b211a;
+  --color-walnut-soft: #3a2d23;
+  --color-cream: #efe8de;
+  --color-cream-muted: #c9b9a5;
+  --color-oak: #8a5a2e;
+  --color-oak-light: #d9a56b;
+  --color-oak-pale: #ecd3ae;
+  --color-success: #3f7d4e;
+  --color-danger: #a33a2a;
+
+  --radius-card: 2rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: #dedad4;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100dvh;
+  color: var(--color-ink);
+  font-family: var(--font-outfit);
+  background:
+    radial-gradient(circle at 18% 22%, rgb(0 0 0 / 0.035) 0 1px, transparent 1.5px) 0 0 / 7px 7px,
+    radial-gradient(circle at 70% 60%, rgb(255 255 255 / 0.22) 0 1px, transparent 1.5px) 0 0 / 11px 11px,
+    linear-gradient(180deg, #dedad4 0%, #e8e4dd 45%, #efe6d6 100%) fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .wood {
+    background:
+      repeating-linear-gradient(100deg, rgb(255 255 255 / 0.025) 0 3px, transparent 3px 9px, rgb(0 0 0 / 0.06) 9px 11px, transparent 11px 19px),
+      var(--color-walnut);
+  }
+
+  .hatched {
+    background: repeating-linear-gradient(135deg, rgb(31 27 24 / 0.16) 0 1.5px, transparent 1.5px 9px), #eeeae4;
+  }
+
+  .soft-card {
+    border-radius: var(--radius-card);
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.72), rgb(247 245 241 / 0.92));
+    border: 1px solid rgb(255 255 255 / 0.7);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.6) inset, 0 12px 32px -18px rgb(43 33 26 / 0.35);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    padding: 0.7rem 1.1rem;
+    white-space: nowrap;
+    background: rgb(255 255 255 / 0.7);
+    border: 1px solid rgb(255 255 255 / 0.8);
+    box-shadow: 0 6px 18px -12px rgb(43 33 26 / 0.4);
+    font-size: 0.95rem;
+    transition: background 150ms ease, transform 150ms ease;
+  }
+
+  .pill:hover {
+    background: rgb(255 255 255 / 0.95);
+  }
+
+  .round-button {
+    display: inline-grid;
+    place-items: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: 9999px;
+    background: rgb(255 255 255 / 0.7);
+    border: 1px solid rgb(255 255 255 / 0.8);
+    box-shadow: 0 6px 18px -12px rgb(43 33 26 / 0.4);
+  }
+
+  /* Barber page surfaces, driven by the theme system's --page-* variables. */
+  .page-shell {
+    min-height: 100dvh;
+    color: var(--page-text);
+    background-color: var(--page-bg);
+    background-image: var(--page-texture);
+    background-size: var(--page-texture-size);
+  }
+
+  .page-card {
+    border-radius: var(--page-radius);
+    background: var(--page-surface);
+    border: 1px solid var(--page-border);
+  }
+
+  .page-ink {
+    border-radius: var(--page-radius);
+    background: var(--page-ink);
+    color: var(--page-on-ink);
+  }
+
+  .page-display {
+    font-family: var(--page-font-display);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-oak);
+  outline-offset: 2px;
 }

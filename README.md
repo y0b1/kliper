@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Kliper.ph
 
-## Getting Started
+Book your barber in Davao: shop barbers, solo barbers and home-service cuts. A Peur product.
 
-First, run the development server:
+## Run it locally
+
+You need Node 20+, pnpm, and PostgreSQL 14+ (Postgres.app or `brew install postgresql@16`).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+createdb kliper                      # or create it in Postgres.app
+cp .env.example .env                 # then edit DATABASE_URL if needed
+pnpm install                         # also runs prisma generate
+pnpm db:deploy                       # applies prisma/migrations
+pnpm db:seed                         # sample Davao shops and barbers (all made up)
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000. The barber dashboard is at `/dashboard`; switch barbers from the
+"Development" note at the top. It has no sign-in yet, so its actions refuse to run in production
+unless `KLIPER_DEV_DASHBOARD=1` is set. Don't set that on a public deployment.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Checks
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+pnpm test        # slot engine, theme system, geo and phone helpers
+pnpm typecheck
+pnpm lint
+pnpm build
+```
 
-## Learn More
+## How it fits together
 
-To learn more about Next.js, take a look at the following resources:
+| Path | What it is |
+| --- | --- |
+| `prisma/schema.prisma` | Data model. Money in centavos, schedules in minutes from Manila midnight. |
+| `prisma/migrations/…_init` | Includes a hand-written exclusion constraint so the database itself rejects overlapping live bookings for one barber. |
+| `src/lib/slots.ts` | Slot engine: schedule ∩ shop hours − bookings (with travel buffers) − time off, on a 15-minute grid. Pure and tested. |
+| `src/lib/theme/` | Barber page themes, ported from slate.ph: 8 presets, validated tokens, automatic contrast, a reduced "card chrome" for the directory. |
+| `src/lib/geo.ts` | Near-me distance math. A visitor's position is used for one search and never stored or put in a URL. |
+| `src/server/` | Data loading and server actions (search, availability, booking, dashboard). |
+| `src/app/[slug]` | Barber page, themed by the barber. Checkout stays in Kliper's look. |
+| `src/app/dashboard` | Barber dashboard: today's chair, requests, package prices and durations, page theme. |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Not built yet
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- SMS sign-in and one-time codes (Semaphore). Bookings currently trust the phone number typed in.
+- GCash checkout (PayMongo). Bookings with a deposit are saved as payment pending.
+- SMS confirmations and reminders.
+- Reference photo uploads, portfolio photos, reviews.
+- A map view and address pins on a map (pins come from the browser's location for now).

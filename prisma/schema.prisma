@@ -1,0 +1,247 @@
+// Kliper.ph data model.
+// Money is stored in centavos (Int). Times are stored as UTC timestamps;
+// weekly schedules are minutes from local midnight in Asia/Manila (UTC+8, no DST).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MembershipRole {
+  OWNER
+  BARBER
+}
+
+enum PaymentMode {
+  FULL
+  DEPOSIT
+  AT_SHOP
+}
+
+enum ConfirmMode {
+  INSTANT
+  REQUEST
+}
+
+enum LocationType {
+  SHOP
+  HOME
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+  DECLINED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PENDING
+  PAID
+  REFUNDED
+}
+
+/// Anyone who signs in with a phone number: customers, barbers, shop owners.
+model User {
+  id        String    @id @default(cuid())
+  phone     String    @unique
+  name      String?
+  createdAt DateTime  @default(now())
+  barber    Barber?
+  bookings  Booking[]
+}
+
+/// A barber's portable profile. It belongs to the barber, not to any shop.
+model Barber {
+  id              String           @id @default(cuid())
+  slug            String           @unique
+  displayName     String
+  bio             String?
+  avatarUrl       String?
+  specialties     String[]
+  userId          String?          @unique
+  user            User?            @relation(fields: [userId], references: [id])
+
+  /// Page theme, same model as slate.ph: a preset id plus validated tokens.
+  themePreset     String           @default("woodshop")
+  themeTokens     Json             @default("{}")
+
+  paymentMode     PaymentMode      @default(AT_SHOP)
+  depositCentavos Int?
+  confirmMode     ConfirmMode      @default(INSTANT)
+
+  /// Home service: off unless the barber turns it on.
+  homeService     Boolean          @default(false)
+  homeFeeCentavos Int?
+  travelBufferMin Int              @default(30)
+  serviceLat      Float?
+  serviceLng      Float?
+  serviceRadiusKm Float?
+
+  /// Solo barbers without a shop still need a location to appear in near-me search.
+  lat             Float?
+  lng             Float?
+  areaLabel       String?
+
+  createdAt       DateTime         @default(now())
+  memberships     ShopMembership[]
+  packages        Package[]
+  addOns          AddOn[]
+  schedules       WeeklySchedule[]
+  timeOff         TimeOff[]
+  bookings        Booking[]
+  portfolio       PortfolioPhoto[]
+}
+
+model Shop {
+  id          String           @id @default(cuid())
+  slug        String           @unique
+  name        String
+  address     String
+  barangay    String?
+  city        String           @default("Davao City")
+  lat         Float
+  lng         Float
+  themePreset String           @default("woodshop")
+  themeTokens Json             @default("{}")
+  createdAt   DateTime         @default(now())
+  memberships ShopMembership[]
+  hours       ShopHours[]
+  bookings    Booking[]
+
+  @@index([lat, lng])
+}
+
+/// Links a barber to a shop. Ending a membership keeps the barber's profile and clients.
+model ShopMembership {
+  id        String         @id @default(cuid())
+  shopId    String
+  barberId  String
+  role      MembershipRole @default(BARBER)
+  active    Boolean        @default(true)
+  startedAt DateTime       @default(now())
+  endedAt   DateTime?
+  shop      Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  barber    Barber         @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, barberId])
+}
+
+/// A "tier" of cut. Each barber sets their own price and duration.
+model Package {
+  id             String    @id @default(cuid())
+  barberId       String
+  name           String
+  description    String?
+  priceCentavos  Int
+  durationMin    Int
+  sortOrder      Int       @default(0)
+  active         Boolean   @default(true)
+  barber         Barber    @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  bookings       Booking[]
+}
+
+/// Extras that add to both price and duration.
+model AddOn {
+  id            String         @id @default(cuid())
+  barberId      String
+  name          String
+  priceCentavos Int
+  durationMin   Int            @default(0)
+  active        Boolean        @default(true)
+  barber        Barber         @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  bookings      BookingAddOn[]
+}
+
+/// One working block on a weekday. Two rows on the same day = a split shift (a break between).
+model WeeklySchedule {
+  id       String @id @default(cuid())
+  barberId String
+  weekday  Int // 0 = Sunday
+  startMin Int // minutes from local midnight
+  endMin   Int
+  barber   Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@index([barberId, weekday])
+}
+
+model ShopHours {
+  id       String @id @default(cuid())
+  shopId   String
+  weekday  Int
+  openMin  Int
+  closeMin Int
+  shop     Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, weekday])
+}
+
+/// Blocked time: breaks, leave, walk-in holds. Set by the barber or the shop owner.
+model TimeOff {
+  id       String   @id @default(cuid())
+  barberId String
+  startsAt DateTime
+  endsAt   DateTime
+  reason   String?
+  barber   Barber   @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@index([barberId, startsAt])
+}
+
+model PortfolioPhoto {
+  id        String   @id @default(cuid())
+  barberId  String
+  url       String
+  caption   String?
+  createdAt DateTime @default(now())
+  barber    Barber   @relation(fields: [barberId], references: [id], onDelete: Cascade)
+}
+
+/// Overlapping PENDING or CONFIRMED bookings for one barber are rejected by a
+/// database exclusion constraint (see the init migration), not only by app code.
+model Booking {
+  id                String         @id @default(cuid())
+  code              String         @unique
+  barberId          String
+  shopId            String?
+  customerId        String
+  packageId         String
+  startsAt          DateTime
+  endsAt            DateTime
+  status            BookingStatus  @default(PENDING)
+  locationType      LocationType   @default(SHOP)
+  /// Home-service address pin. Stored on the booking only and shown only to its barber.
+  address           String?
+  lat               Float?
+  lng               Float?
+  note              String?
+  referencePhotoUrl String?
+  priceCentavos     Int
+  depositCentavos   Int            @default(0)
+  paymentStatus     PaymentStatus  @default(UNPAID)
+  paymentRef        String?
+  createdAt         DateTime       @default(now())
+  barber            Barber         @relation(fields: [barberId], references: [id])
+  shop              Shop?          @relation(fields: [shopId], references: [id])
+  customer          User           @relation(fields: [customerId], references: [id])
+  package           Package        @relation(fields: [packageId], references: [id])
+  addOns            BookingAddOn[]
+
+  @@index([barberId, startsAt])
+}
+
+model BookingAddOn {
+  bookingId String
+  addOnId   String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  addOn     AddOn   @relation(fields: [addOnId], references: [id])
+
+  @@id([bookingId, addOnId])
+}
