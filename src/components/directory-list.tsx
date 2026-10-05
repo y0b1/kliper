@@ -3,8 +3,9 @@
 import { LocateFixed, MapPin } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { searchNearby } from "@/server/actions";
-import type { DirectoryCard } from "@/server/directory";
+import type { Directory } from "@/server/directory";
 import { BarberCard } from "./barber-card";
+import { ShopCard } from "./shop-card";
 
 /** Neighborhood centers, for visitors planning ahead or who'd rather not share a location. */
 const AREAS = [
@@ -19,21 +20,28 @@ const AREAS = [
 type Filter = "all" | "today" | "home";
 type Status = "idle" | "locating" | "denied" | "unavailable";
 
-export function DirectoryList({ initial }: { initial: DirectoryCard[] }) {
-  const [cards, setCards] = useState(initial);
+export function DirectoryList({ initial }: { initial: Directory }) {
+  const [directory, setDirectory] = useState(initial);
   const [sortedBy, setSortedBy] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [filter, setFilter] = useState<Filter>("all");
   const [pending, startTransition] = useTransition();
 
-  const shown = useMemo(
-    () => cards.filter((c) => (filter === "today" ? c.openToday : filter === "home" ? c.homeService : true)),
-    [cards, filter],
-  );
+  const shown = useMemo(() => {
+    const keep = (b: { openToday: boolean; homeService: boolean }) =>
+      filter === "today" ? b.openToday : filter === "home" ? b.homeService : true;
+    return {
+      // A shop stays listed when at least one of its barbers matches; only matching barbers show inside it.
+      shops: directory.shops
+        .map((shop) => ({ ...shop, barbers: shop.barbers.filter(keep) }))
+        .filter((shop) => shop.barbers.length > 0),
+      independents: directory.independents.filter(keep),
+    };
+  }, [directory, filter]);
 
   function sortFrom(center: { lat: number; lng: number }, label: string) {
     startTransition(async () => {
-      setCards(await searchNearby(center));
+      setDirectory(await searchNearby(center));
       setSortedBy(label);
     });
   }
@@ -127,11 +135,37 @@ export function DirectoryList({ initial }: { initial: DirectoryCard[] }) {
         ))}
       </div>
 
-      <div className={`mt-4 grid gap-4 md:grid-cols-2 ${pending ? "opacity-60" : ""}`}>
-        {shown.map((card, index) => (
-          <BarberCard key={card.slug} card={card} highlight={index === 0} />
-        ))}
-        {shown.length === 0 && <p className="soft-card p-6 text-muted">No barbers match that filter yet.</p>}
+      <div className={pending ? "opacity-60" : ""}>
+        {shown.shops.length > 0 && (
+          <section aria-labelledby="shops" className="mt-6">
+            <h2 id="shops" className="flex items-baseline justify-between text-2xl font-light">
+              Barbershops <span className="text-sm text-muted">{shown.shops.length}</span>
+            </h2>
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              {shown.shops.map((shop, index) => (
+                <ShopCard key={shop.slug} shop={shop} highlight={index === 0} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {shown.independents.length > 0 && (
+          <section aria-labelledby="independents" className="mt-8">
+            <h2 id="independents" className="flex items-baseline justify-between text-2xl font-light">
+              Independent barbers <span className="text-sm text-muted">{shown.independents.length}</span>
+            </h2>
+            <p className="mt-1 text-sm text-muted">Solo chairs and home-service barbers.</p>
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              {shown.independents.map((card) => (
+                <BarberCard key={card.slug} card={card} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {shown.shops.length === 0 && shown.independents.length === 0 && (
+          <p className="soft-card mt-6 p-6 text-muted">No barbers match that filter yet.</p>
+        )}
       </div>
     </>
   );

@@ -3,13 +3,14 @@ import { SlidersHorizontal } from "lucide-react";
 import { DirectoryList } from "@/components/directory-list";
 import { TopBar } from "@/components/top-bar";
 import { listDirectory } from "@/server/barbers";
-import { toCard } from "@/server/directory";
+import { toDirectory } from "@/server/directory";
 
 export const dynamic = "force-dynamic";
 
 export default async function DirectoryPage() {
-  const cards = (await listDirectory()).map(toCard);
-  const shops = new Set(cards.map((c) => c.shopName).filter(Boolean)).size;
+  const directory = toDirectory(await listDirectory());
+  const cards = [...directory.shops.flatMap((s) => s.barbers), ...directory.independents];
+  const shops = directory.shops.length;
   const stats = [
     { label: "Open today", value: cards.filter((c) => c.openToday).length, className: "bg-walnut text-cream" },
     { label: "Home service", value: cards.filter((c) => c.homeService).length, className: "bg-oak-light text-ink" },
@@ -31,7 +32,7 @@ export default async function DirectoryPage() {
         </span>
       </TopBar>
 
-      <h1 className="mt-10 text-5xl font-light tracking-tight md:text-6xl">Barbers</h1>
+      <h1 className="mt-10 text-5xl font-light tracking-tight md:text-6xl">Barbershops</h1>
       <p className="mt-2 text-muted">Davao City · book a time, skip the queue</p>
 
       <section aria-label="At a glance" className="mt-6 grid grid-cols-4 gap-2">
@@ -43,7 +44,7 @@ export default async function DirectoryPage() {
         ))}
       </section>
 
-      <DirectoryList initial={cards} />
+      <DirectoryList initial={directory} />
     </main>
   );
 }

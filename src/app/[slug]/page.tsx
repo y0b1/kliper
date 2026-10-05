@@ -44,8 +44,8 @@ export default async function BarberPage(props: PageProps<"/[slug]">) {
       <main className="mx-auto max-w-xl px-4 pb-40 pt-[max(1.25rem,env(safe-area-inset-top))]">
         <header className="flex items-center justify-between">
           <Link
-            href="/"
-            aria-label="Back to all barbers"
+            href={location?.shopSlug ? `/shop/${location.shopSlug}` : "/"}
+            aria-label={location?.shopName ? `Back to ${location.shopName}` : "Back to all barbershops"}
             className="grid size-13 place-items-center rounded-full border border-[var(--page-border)] bg-[var(--page-surface)]"
           >
             <ArrowLeft size={20} strokeWidth={1.75} />
@@ -56,6 +56,16 @@ export default async function BarberPage(props: PageProps<"/[slug]">) {
         </header>
 
         <section className="page-ink mt-6 p-6">
+          {location?.shopName ? (
+            <Link
+              href={`/shop/${location.shopSlug}`}
+              className="mb-4 inline-flex items-center gap-1.5 text-sm uppercase tracking-[0.2em] opacity-80 hover:opacity-100"
+            >
+              <Store size={14} /> {location.shopName}
+            </Link>
+          ) : (
+            <p className="mb-4 text-sm uppercase tracking-[0.2em] opacity-80">Independent barber</p>
+          )}
           <div className="flex items-center gap-4">
             <span
               aria-hidden
@@ -71,16 +81,10 @@ export default async function BarberPage(props: PageProps<"/[slug]">) {
           </div>
           {barber.bio && <p className="mt-5 leading-relaxed opacity-90">{barber.bio}</p>}
           <div className="mt-5 flex flex-wrap gap-2 text-sm">
-            {location?.shopName ? (
+            {location && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5">
-                <Store size={14} /> {location.shopName}, {location.label}
+                <MapPin size={14} /> {location.label}
               </span>
-            ) : (
-              location && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5">
-                  <MapPin size={14} /> {location.label}
-                </span>
-              )
             )}
             {barber.homeService && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5">

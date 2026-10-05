@@ -8,7 +8,7 @@ import { distanceKm, isValidLatLng } from "@/lib/geo";
 import { quote } from "@/lib/slots";
 import { themePresetIdSchema, validateThemeWrite, defaultTokens } from "@/lib/theme";
 import { getAvailability, getBarberBySlug, listDirectory } from "./barbers";
-import { toCard, type DirectoryCard } from "./directory";
+import { toDirectory, type Directory } from "./directory";
 import { normalizePhMobile } from "./phone";
 
 /* ---------- Near me ---------- */
@@ -17,10 +17,9 @@ import { normalizePhMobile } from "./phone";
  * The visitor's position arrives in the request body, is used to sort this one
  * response, and is not logged or stored.
  */
-export async function searchNearby(input: { lat: number; lng: number }): Promise<DirectoryCard[]> {
+export async function searchNearby(input: { lat: number; lng: number }): Promise<Directory> {
   const center = { lat: Number(input?.lat), lng: Number(input?.lng) };
-  if (!isValidLatLng(center)) return (await listDirectory()).map(toCard);
-  return (await listDirectory(center)).map(toCard);
+  return toDirectory(await listDirectory(isValidLatLng(center) ? center : undefined));
 }
 
 /* ---------- Availability ---------- */

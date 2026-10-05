@@ -20,9 +20,11 @@ export async function getBarberBySlug(slug: string) {
 export type BarberWithRelations = NonNullable<Awaited<ReturnType<typeof getBarberBySlug>>>;
 
 /** Where a barber can be found: their shop, or their own spot if they work solo. */
-export function barberLocation(barber: BarberWithRelations): (LatLng & { label: string; shopName?: string }) | null {
+export function barberLocation(
+  barber: BarberWithRelations,
+): (LatLng & { label: string; shopName?: string; shopSlug?: string }) | null {
   const shop = barber.memberships[0]?.shop;
-  if (shop) return { lat: shop.lat, lng: shop.lng, label: shop.barangay ?? shop.city, shopName: shop.name };
+  if (shop) return { lat: shop.lat, lng: shop.lng, label: shop.barangay ?? shop.city, shopName: shop.name, shopSlug: shop.slug };
   if (barber.lat != null && barber.lng != null) return { lat: barber.lat, lng: barber.lng, label: barber.areaLabel ?? "Davao" };
   return null;
 }
@@ -88,6 +90,17 @@ export async function nextOpening(barber: BarberWithRelations, now = new Date())
     if (slots.length > 0) return { date, slot: slots[0] };
   }
   return null;
+}
+
+/** A shop with its active barbers, for the shop page. */
+export async function getShopBySlug(slug: string) {
+  return db.shop.findUnique({
+    where: { slug },
+    include: {
+      hours: true,
+      memberships: { where: { active: true }, include: { barber: { include: barberInclude } }, orderBy: { role: "asc" } },
+    },
+  });
 }
 
 export interface DirectoryEntry {

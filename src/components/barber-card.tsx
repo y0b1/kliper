@@ -40,8 +40,8 @@ export function BarberCard({ card, highlight = false }: { card: DirectoryCard; h
 
       <dl className="mt-5 grid grid-cols-3 gap-3 text-sm">
         <div>
-          <dt className={highlight ? "text-ink/65" : "text-muted"}>{card.shopName ? "Shop" : "Works"}</dt>
-          <dd className="mt-1 truncate">{card.shopName ?? (card.homeService ? "Solo + home" : "Solo")}</dd>
+          <dt className={highlight ? "text-ink/65" : "text-muted"}>Works</dt>
+          <dd className="mt-1 truncate">{card.homeService ? "Solo + home" : "Solo"}</dd>
         </div>
         <div>
           <dt className={highlight ? "text-ink/65" : "text-muted"}>Area</dt>
