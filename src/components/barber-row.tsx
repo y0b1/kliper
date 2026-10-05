@@ -20,6 +20,28 @@ function whenLabel(card: DirectoryCard) {
   return card.openToday ? "today" : card.nextDay;
 }
 
+/** The next free time, set large, with "today" or the day under it. */
+export function NextTime({ card }: { card: DirectoryCard }) {
+  return (
+    <span className="shrink-0 text-right" aria-label={card.nextClock ? `Next opening ${card.next}` : "No openings this week"}>
+      {card.nextClock ? (
+        <>
+          <span className="numeral block text-[2rem] leading-none font-bold">
+            {card.nextClock}
+            <span className="ml-0.5 text-base font-semibold">{card.nextMeridiem}</span>
+          </span>
+          <span className={`mt-1 inline-flex items-center gap-1.5 text-sm ${card.openToday ? "text-pole-blue" : "text-ink-soft"}`}>
+            {card.openToday && <span className="size-2 rounded-full bg-pole-blue" />}
+            {whenLabel(card)}
+          </span>
+        </>
+      ) : (
+        <span className="text-sm text-ink-soft">Booked up</span>
+      )}
+    </span>
+  );
+}
+
 /**
  * One barber in a list: who they are on the left, their next free time on the
  * right, set large. The whole row opens their booking page.
@@ -40,22 +62,7 @@ export function BarberRow({ card, showPlace = false }: { card: DirectoryCard; sh
         </span>
         {card.from && <span className="block text-sm text-ink-soft">Cuts from {card.from}</span>}
       </span>
-      <span className="shrink-0 text-right" aria-label={card.nextClock ? `Next opening ${card.next}` : "No openings this week"}>
-        {card.nextClock ? (
-          <>
-            <span className="numeral block text-[2rem] leading-none font-bold">
-              {card.nextClock}
-              <span className="ml-0.5 text-base font-semibold">{card.nextMeridiem}</span>
-            </span>
-            <span className={`mt-1 inline-flex items-center gap-1.5 text-sm ${card.openToday ? "text-pole-blue" : "text-ink-soft"}`}>
-              {card.openToday && <span className="size-2 rounded-full bg-pole-blue" />}
-              {whenLabel(card)}
-            </span>
-          </>
-        ) : (
-          <span className="text-sm text-ink-soft">Booked up</span>
-        )}
-      </span>
+      <NextTime card={card} />
     </Link>
   );
 }

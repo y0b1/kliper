@@ -1,24 +1,11 @@
 "use client";
 
-import { Check, LocateFixed } from "lucide-react";
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { LocateFixed } from "lucide-react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { minutes, peso } from "@/lib/money";
 import { createBooking, getSlots, type BookingState, type SlotResult } from "@/server/actions";
-
-interface Pkg {
-  id: string;
-  name: string;
-  description: string | null;
-  priceCentavos: number;
-  durationMin: number;
-}
-
-interface AddOn {
-  id: string;
-  name: string;
-  priceCentavos: number;
-  durationMin: number;
-}
+import { DayStrip, SlotGrid } from "./booking-pickers";
+import { Price, PriceBoard, type PriceBoardAddOn as AddOn, type PriceBoardPackage as Pkg } from "./price-board";
 
 interface Props {
   slug: string;
@@ -35,17 +22,6 @@ interface Props {
 }
 
 const radius = (factor: number) => ({ borderRadius: `calc(var(--page-radius) * ${factor})` });
-
-/** "₱150" → the peso sign small, the number large. */
-function Price({ centavos, plus = false }: { centavos: number; plus?: boolean }) {
-  const text = peso(centavos).replace("₱", "");
-  return (
-    <span className="numeral whitespace-nowrap">
-      <span className="text-[0.7em] font-semibold">{plus ? "+₱" : "₱"}</span>
-      <span className="font-bold">{text}</span>
-    </span>
-  );
-}
 
 export function BookingFlow(props: Props) {
   const [packageId, setPackageId] = useState(props.packages[0]?.id ?? "");
@@ -76,104 +52,20 @@ export function BookingFlow(props: Props) {
   const slot = result?.slots.find((s) => s.startsAt === startsAt);
   const dayLabel = props.dates.find((d) => d.iso === date)?.label;
 
-  // Group times into morning / afternoon / evening so a long day stays scannable.
-  const groups = useMemo(() => {
-    const out: Array<{ name: string; slots: NonNullable<typeof result>["slots"] }> = [];
-    for (const s of result?.slots ?? []) {
-      const [clock, meridiem] = s.label.split(" ");
-      const hour = Number(clock.split(":")[0]) % 12 + (meridiem === "PM" ? 12 : 0);
-      const name = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
-      if (out.at(-1)?.name !== name) out.push({ name, slots: [] });
-      out.at(-1)!.slots.push(s);
-    }
-    return out;
-  }, [result]);
-
   function toggleAddOn(id: string) {
     setAddOnIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
   }
 
   return (
     <>
-      {/* The price board: painted on the barber's own board color (walnut by default). */}
-      <section aria-labelledby="cuts" className="mt-8 px-5 pb-5 pt-4" style={{ ...radius(1), background: "var(--page-ink)", color: "var(--page-on-ink)" }}>
-        <h2 id="cuts" className="page-display text-[1.75rem] font-bold">
-          Cuts
-        </h2>
-        <div role="radiogroup" aria-labelledby="cuts" className="mt-2">
-          {props.packages.map((p) => {
-            const on = p.id === packageId;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                onClick={() => setPackageId(p.id)}
-                className="-mx-2 flex w-[calc(100%+1rem)] items-start gap-3 px-2 py-3 text-left"
-                style={{ ...radius(0.5), background: on ? "rgb(255 255 255 / 0.1)" : "transparent" }}
-              >
-                <span
-                  aria-hidden
-                  className="mt-1.5 grid size-5 shrink-0 place-items-center rounded-full border-2"
-                  style={{ borderColor: on ? "var(--page-accent)" : "currentColor", background: on ? "var(--page-accent)" : "transparent", opacity: on ? 1 : 0.6 }}
-                >
-                  {on && <Check size={12} strokeWidth={3.5} style={{ color: "var(--page-on-accent)" }} />}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-baseline gap-2">
-                    <span className="text-[1.0625rem] font-semibold">{p.name}</span>
-                    <span className="leader" />
-                    <span className="text-[1.6rem] leading-none">
-                      <Price centavos={p.priceCentavos} />
-                    </span>
-                  </span>
-                  <span className="mt-0.5 block text-sm opacity-80">
-                    {minutes(p.durationMin)}
-                    {p.description && `. ${p.description}`}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {props.addOns.length > 0 && (
-          <>
-            <h3 className="mt-4 border-t border-current/20 pt-4 font-semibold">Add to it</h3>
-            <div className="mt-1">
-              {props.addOns.map((a) => {
-                const on = addOnIds.includes(a.id);
-                return (
-                  <button
-                    key={a.id}
-                    type="button"
-                    role="checkbox"
-                    aria-checked={on}
-                    onClick={() => toggleAddOn(a.id)}
-                    className="-mx-2 flex w-[calc(100%+1rem)] items-baseline gap-3 px-2 py-2.5 text-left"
-                    style={radius(0.5)}
-                  >
-                    <span
-                      aria-hidden
-                      className="grid size-5 shrink-0 translate-y-1 place-items-center rounded border-2"
-                      style={{ borderColor: on ? "var(--page-accent)" : "currentColor", background: on ? "var(--page-accent)" : "transparent", opacity: on ? 1 : 0.6 }}
-                    >
-                      {on && <Check size={12} strokeWidth={3.5} style={{ color: "var(--page-on-accent)" }} />}
-                    </span>
-                    <span>{a.name}</span>
-                    <span className="text-sm opacity-75">{a.durationMin > 0 ? `${a.durationMin} min` : ""}</span>
-                    <span className="leader" />
-                    <span className="text-xl leading-none">
-                      <Price centavos={a.priceCentavos} plus />
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </section>
+      <PriceBoard
+        packages={props.packages}
+        addOns={props.addOns}
+        packageId={packageId}
+        addOnIds={addOnIds}
+        onPick={setPackageId}
+        onToggleAddOn={toggleAddOn}
+      />
 
       {props.homeService && props.hasShop && (
         <fieldset className="mt-6">
@@ -212,71 +104,18 @@ export function BookingFlow(props: Props) {
         <h2 id="when" className="page-display text-[1.75rem] font-bold">
           When
         </h2>
-        <div className="-mx-4 mt-3 flex gap-1 overflow-x-auto px-4 [scrollbar-width:none]" role="tablist" aria-label="Day">
-          {props.dates.map((d) => {
-            const on = d.iso === date;
-            return (
-              <button
-                key={d.iso}
-                type="button"
-                role="tab"
-                aria-selected={on}
-                aria-label={d.label}
-                onClick={() => setDate(d.iso)}
-                className="flex min-w-[3.75rem] flex-col items-center px-2 pb-2 pt-1.5"
-                style={{
-                  ...radius(0.5),
-                  background: on ? "var(--page-text)" : "transparent",
-                  color: on ? "var(--page-bg)" : "var(--page-text)",
-                }}
-              >
-                <span className="text-sm">{d.weekday}</span>
-                <span className="numeral text-[1.75rem] leading-none font-bold">{d.day}</span>
-              </button>
-            );
-          })}
-        </div>
+        <DayStrip dates={props.dates} selected={date} onPick={setDate} />
 
-        <div className={`mt-4 min-h-24 ${loading ? "opacity-40" : ""}`} aria-live="polite" aria-busy={loading}>
-          {groups.map((group) => (
-            <div key={group.name} className="mt-4 first:mt-0">
-              <h3 className="text-sm font-medium text-[var(--page-muted)]">{group.name}</h3>
-              <div className="mt-1.5 grid grid-cols-4 gap-1.5">
-                {group.slots.map((s) => {
-                  const on = s.startsAt === startsAt;
-                  const [clock, meridiem] = s.label.split(" ");
-                  return (
-                    <button
-                      key={s.startsAt}
-                      type="button"
-                      aria-pressed={on}
-                      aria-label={s.label}
-                      onClick={() => {
-                        setStartsAt(s.startsAt);
-                        setCheckout(false);
-                      }}
-                      className="numeral flex min-h-12 items-baseline justify-center gap-0.5 border-[1.5px] text-[1.375rem] font-bold"
-                      style={{
-                        ...radius(0.5),
-                        borderColor: on ? "var(--page-accent)" : "var(--page-border)",
-                        background: on ? "var(--page-accent)" : "var(--page-surface)",
-                        color: on ? "var(--page-on-accent)" : "var(--page-text)",
-                      }}
-                    >
-                      {clock}
-                      <span className="text-xs font-semibold">{meridiem}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-          {result && result.slots.length === 0 && (
-            <p className="py-3 text-[var(--page-muted)]">
-              No {minutes(duration)} openings on {dayLabel}. Try another day, or pick a shorter cut.
-            </p>
-          )}
-        </div>
+        <SlotGrid
+          slots={result?.slots ?? []}
+          selected={startsAt}
+          loading={loading}
+          onPick={(value) => {
+            setStartsAt(value);
+            setCheckout(false);
+          }}
+          empty={result ? `No ${minutes(duration)} openings on ${dayLabel}. Try another day, or pick a shorter cut.` : null}
+        />
       </section>
 
       {checkout && slot && pkg && (

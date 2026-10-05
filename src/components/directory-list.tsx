@@ -21,7 +21,10 @@ const AREAS = [
 type Filter = "all" | "today" | "home";
 type Status = "idle" | "locating" | "denied" | "unavailable";
 
-/** The hero: today's soonest free chairs, times set large. */
+/**
+ * The hero: today's soonest free chairs, times set large. A shop shows once,
+ * under its own name, with its soonest chair; independents show by name.
+ */
 function NextChairs({ cards }: { cards: DirectoryCard[] }) {
   if (cards.length === 0) {
     return <p className="mt-3 text-ink-soft">No chairs left today. Tomorrow&apos;s openings are listed below.</p>;
@@ -29,16 +32,16 @@ function NextChairs({ cards }: { cards: DirectoryCard[] }) {
   return (
     <ol className="-mx-4 mt-3 flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none]">
       {cards.map((card) => (
-        <li key={card.slug} className="snap-start">
+        <li key={card.shopSlug ?? card.slug} className="snap-start">
           <Link
-            href={`/${card.slug}`}
+            href={card.shopSlug ? `/shop/${card.shopSlug}` : `/${card.slug}`}
             className="flex w-40 flex-col rounded-lg border-[1.5px] border-ink bg-paper px-4 pb-3.5 pt-3 transition-transform active:translate-y-px"
           >
             <span className="numeral text-[3.25rem] leading-[0.95] font-extrabold">{card.nextClock}</span>
             <span className="numeral text-lg font-bold leading-none">{card.nextMeridiem}</span>
-            <span className="mt-3 truncate font-semibold">{card.name}</span>
+            <span className="mt-3 truncate font-semibold">{card.shopName ?? card.name}</span>
             <span className="truncate text-sm text-ink-soft">
-              {card.shopName ?? (card.homeService ? "Home service" : card.area)}
+              {card.shopName || !card.homeService ? card.area : "Home service"}
               {card.distance && `, ${card.distance}`}
             </span>
           </Link>
@@ -62,11 +65,20 @@ export function DirectoryList({ initial }: { initial: Directory }) {
 
   const nextChairs = useMemo(() => {
     const today = everyone.filter((c) => c.openToday && c.nextAt != null);
-    // Near someone: closest first (the server's order). Otherwise: soonest first.
+    // Soonest first, so the first card kept for each shop is its soonest chair.
+    const soonest = [...today].sort((a, b) => a.nextAt! - b.nextAt!);
+    const seen = new Set<string>();
+    const onePerShop = soonest.filter((c) => {
+      const key = c.shopSlug ?? c.slug;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    // Near someone: closest first. Otherwise: soonest first.
     if (sortedBy) {
-      return [...today].sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity)).slice(0, 8);
+      return onePerShop.sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity)).slice(0, 8);
     }
-    return [...today].sort((a, b) => a.nextAt! - b.nextAt!).slice(0, 8);
+    return onePerShop.slice(0, 8);
   }, [everyone, sortedBy]);
 
   const shown = useMemo(() => {

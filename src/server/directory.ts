@@ -1,6 +1,7 @@
 import "server-only";
 import { formatDistance } from "@/lib/geo";
 import { peso } from "@/lib/money";
+import { shopRating, type Rating } from "@/lib/ratings";
 import { resolveCardChrome, themePresets, presetIdOrDefault } from "@/lib/theme";
 import { addDays, formatManilaDate, manilaDateOf } from "@/lib/time";
 import type { DirectoryEntry } from "./barbers";
@@ -30,6 +31,7 @@ export interface DirectoryCard {
   openToday: boolean;
   homeService: boolean;
   instant: boolean;
+  rating: Rating | null;
   themeName: string;
   chrome: Record<string, string>;
 }
@@ -40,11 +42,15 @@ export interface ShopCard {
   name: string;
   area: string;
   address: string;
+  imageUrl: string | null;
+  logoUrl: string | null;
   distance: string | null;
   from: string | null;
   next: string;
   openToday: boolean;
   homeService: boolean;
+  /** Mean of its barbers' ratings (see `shopRating`); null before any reviews. */
+  rating: Rating | null;
   chrome: Record<string, string>;
   barbers: DirectoryCard[];
 }
@@ -99,6 +105,7 @@ export function toCard(entry: DirectoryEntry): DirectoryCard {
     openToday: next.today,
     homeService: barber.homeService,
     instant: barber.confirmMode === "INSTANT",
+    rating: entry.rating,
     themeName: themePresets[presetIdOrDefault(barber.themePreset)].name,
     chrome: { ...resolveCardChrome(barber.themePreset, barber.themeTokens) },
   };
@@ -127,11 +134,14 @@ export function toDirectory(entries: DirectoryEntry[]): Directory {
         name: shop.name,
         area: shop.barangay ?? shop.city,
         address: shop.address,
+        imageUrl: shop.imageUrl,
+        logoUrl: shop.logoUrl,
         distance: card.distance,
         from: null,
         next: card.next,
         openToday: false,
         homeService: false,
+        rating: null,
         chrome: { ...resolveCardChrome(shop.themePreset, shop.themeTokens) },
         barbers: [],
       };
@@ -145,6 +155,7 @@ export function toDirectory(entries: DirectoryEntry[]): Directory {
     group.from = prices.length ? peso(Math.min(...prices)) : null;
     group.openToday = group.barbers.some((b) => b.openToday);
     group.homeService = group.barbers.some((b) => b.homeService);
+    group.rating = shopRating(group.barbers.map((b) => b.rating));
     const soonest = [...group.barbers].filter((b) => b.nextAt != null).sort((a, b) => a.nextAt! - b.nextAt!)[0];
     group.next = soonest ? soonest.next : "None this week";
   }

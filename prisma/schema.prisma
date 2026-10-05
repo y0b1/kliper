@@ -56,6 +56,7 @@ model User {
   createdAt DateTime  @default(now())
   barber    Barber?
   bookings  Booking[]
+  reviews   Review[]
 }
 
 /// A barber's portable profile. It belongs to the barber, not to any shop.
@@ -98,6 +99,7 @@ model Barber {
   timeOff         TimeOff[]
   bookings        Booking[]
   portfolio       PortfolioPhoto[]
+  reviews         Review[]
 }
 
 model Shop {
@@ -109,6 +111,10 @@ model Shop {
   city        String           @default("Davao City")
   lat         Float
   lng         Float
+  /// The shop's own photo (storefront or interior), shown on its directory listing and shop page.
+  imageUrl    String?
+  /// Square logo, shown on the shop sign to the right of the name.
+  logoUrl     String?
   themePreset String           @default("woodshop")
   themeTokens Json             @default("{}")
   createdAt   DateTime         @default(now())
@@ -233,6 +239,7 @@ model Booking {
   customer          User           @relation(fields: [customerId], references: [id])
   package           Package        @relation(fields: [packageId], references: [id])
   addOns            BookingAddOn[]
+  review            Review?
 
   @@index([barberId, startsAt])
 }
@@ -244,4 +251,22 @@ model BookingAddOn {
   addOn     AddOn   @relation(fields: [addOnId], references: [id])
 
   @@id([bookingId, addOnId])
+}
+
+/// A customer's rating of one completed booking, one review per booking.
+/// Reviews belong to the barber; a shop's rating is the average of its barbers' ratings.
+/// Stars are checked to be 1 to 5 by the database (see the reviews migration).
+model Review {
+  id         String   @id @default(cuid())
+  bookingId  String   @unique
+  barberId   String
+  customerId String
+  stars      Int
+  comment    String?
+  createdAt  DateTime @default(now())
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  barber     Barber   @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  customer   User     @relation(fields: [customerId], references: [id])
+
+  @@index([barberId])
 }

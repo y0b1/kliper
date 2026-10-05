@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { distanceKm, type LatLng } from "@/lib/geo";
+import type { Rating } from "@/lib/ratings";
 import { findSlots, type Busy, type Slot } from "@/lib/slots";
 import { addDays, manilaDateOf, manilaMidnight } from "@/lib/time";
 
@@ -109,6 +110,8 @@ export interface DirectoryEntry {
   distanceKm: number | null;
   fromCentavos: number | null;
   next: Awaited<ReturnType<typeof nextOpening>>;
+  /** Mean of the barber's review stars; null before their first review. */
+  rating: Rating | null;
 }
 
 /**
@@ -116,7 +119,11 @@ export interface DirectoryEntry {
  * for this call only and is never written anywhere.
  */
 export async function listDirectory(center?: LatLng): Promise<DirectoryEntry[]> {
-  const barbers = await db.barber.findMany({ include: barberInclude, orderBy: { displayName: "asc" } });
+  const [barbers, reviewStats] = await Promise.all([
+    db.barber.findMany({ include: barberInclude, orderBy: { displayName: "asc" } }),
+    db.review.groupBy({ by: ["barberId"], _avg: { stars: true }, _count: { _all: true } }),
+  ]);
+  const ratings = new Map(reviewStats.map((r) => [r.barberId, { average: r._avg.stars!, count: r._count._all }]));
   const now = new Date();
   const entries = await Promise.all(
     barbers.map(async (barber) => {
@@ -128,6 +135,7 @@ export async function listDirectory(center?: LatLng): Promise<DirectoryEntry[]> 
         distanceKm: center && location ? distanceKm(center, location) : null,
         fromCentavos: prices.length ? Math.min(...prices) : null,
         next: await nextOpening(barber, now),
+        rating: ratings.get(barber.id) ?? null,
       };
     }),
   );
