@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { SlidersHorizontal } from "lucide-react";
 import { DirectoryList } from "@/components/directory-list";
 import { TopBar } from "@/components/top-bar";
 import { listDirectory } from "@/server/barbers";
@@ -9,40 +8,23 @@ export const dynamic = "force-dynamic";
 
 export default async function DirectoryPage() {
   const directory = toDirectory(await listDirectory());
-  const cards = [...directory.shops.flatMap((s) => s.barbers), ...directory.independents];
-  const shops = directory.shops.length;
-  const stats = [
-    { label: "Open today", value: cards.filter((c) => c.openToday).length, className: "bg-walnut text-cream" },
-    { label: "Home service", value: cards.filter((c) => c.homeService).length, className: "bg-oak-light text-ink" },
-    { label: "Instant", value: cards.filter((c) => c.instant).length, className: "hatched text-ink" },
-    { label: "Shops", value: shops, className: "border border-ink/70 text-ink" },
-  ];
 
   return (
-    <main className="mx-auto max-w-xl px-4 pb-20 pt-[max(1.25rem,env(safe-area-inset-top))] md:max-w-4xl">
+    <main className="mx-auto max-w-xl px-4 pb-24 pt-[max(1rem,env(safe-area-inset-top))] md:max-w-4xl md:px-8">
       <TopBar>
-        <Link href="/" className="pill">
-          Directory
-        </Link>
-        <Link href="/dashboard" className="pill">
+        <Link href="/dashboard" className="underline-offset-4 hover:underline">
           For barbers
         </Link>
-        <span className="round-button hidden! sm:inline-grid!" aria-hidden>
-          <SlidersHorizontal size={18} strokeWidth={1.75} />
-        </span>
       </TopBar>
 
-      <h1 className="mt-10 text-5xl font-light tracking-tight md:text-6xl">Barbershops</h1>
-      <p className="mt-2 text-muted">Davao City · book a time, skip the queue</p>
-
-      <section aria-label="At a glance" className="mt-6 grid grid-cols-4 gap-2">
-        {stats.map((stat) => (
-          <div key={stat.label} className="min-w-0">
-            <p className="truncate pb-2 text-xs text-muted sm:text-sm">{stat.label}</p>
-            <p className={`rounded-full px-4 py-3 text-sm ${stat.className}`}>{stat.value}</p>
-          </div>
-        ))}
-      </section>
+      <h1 className="font-sign mt-10 text-[3.4rem] leading-[0.92] font-extrabold tracking-[0.005em] md:text-[5rem]">
+        Get a cut in
+        <br />
+        Davao today.
+      </h1>
+      <p className="mt-3 max-w-md text-ink-soft">
+        See who has a free chair, pick a time, and walk in when it&apos;s your turn.
+      </p>
 
       <DirectoryList initial={directory} />
     </main>

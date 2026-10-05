@@ -18,7 +18,7 @@ export const themePresetIds = [
 export type ThemePresetId = (typeof themePresetIds)[number];
 
 /** Self-hosted through next/font; a theme can only pick from this list. */
-export const themeFonts = ["Outfit", "Oswald", "Playfair Display", "Space Mono", "Bebas Neue", "Righteous"] as const;
+export const themeFonts = ["Big Shoulders Display", "Outfit", "Oswald", "Playfair Display", "Space Mono", "Bebas Neue", "Righteous"] as const;
 export type ThemeFont = (typeof themeFonts)[number];
 
 export const themeTextures = ["none", "wood-grain", "concrete", "pole-stripes", "scanlines", "halftone", "paper-grain"] as const;

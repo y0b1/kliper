@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import "@fontsource-variable/big-shoulders-display";
+import "@fontsource-variable/instrument-sans";
 import "@fontsource-variable/outfit";
 import "@fontsource-variable/oswald";
 import "@fontsource-variable/playfair-display";
@@ -9,13 +11,13 @@ import "@fontsource/righteous";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "Kliper · Book your barber in Davao", template: "%s · Kliper" },
-  description: "Book a barber in Davao: shop barbers, solo barbers and home-service cuts. Pick a time, skip the queue.",
+  title: { default: "Kliper: book a barber in Davao", template: "%s | Kliper" },
+  description: "Find a free chair near you and book it. Barbershops, solo barbers and home-service cuts in Davao.",
   applicationName: "Kliper",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#2b211a",
+  themeColor: "#e3e1dc",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",

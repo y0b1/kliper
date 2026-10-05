@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CheckCircle2, Clock, Home, Store } from "lucide-react";
 import { TopBar } from "@/components/top-bar";
 import { db } from "@/lib/db";
 import { minutes, peso } from "@/lib/money";
@@ -10,12 +9,12 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Your booking", robots: { index: false } };
 
 const statusCopy = {
-  CONFIRMED: { title: "You're booked", note: "See you there. Arrive a few minutes early." },
-  PENDING: { title: "Request sent", note: "Your barber confirms each booking. We'll text you when they do." },
-  COMPLETED: { title: "All done", note: "Thanks for booking with Kliper." },
-  CANCELLED: { title: "Cancelled", note: "This booking was cancelled." },
-  DECLINED: { title: "Not available", note: "Your barber couldn't take this one. Try another time." },
-  NO_SHOW: { title: "Missed", note: "This booking was marked as a no-show." },
+  CONFIRMED: { title: "You're booked.", note: "Your chair is held. Come a few minutes early." },
+  PENDING: { title: "Request sent.", note: "Your barber accepts each booking personally. We'll text you when they do." },
+  COMPLETED: { title: "All done.", note: "Thanks for booking with Kliper." },
+  CANCELLED: { title: "Cancelled.", note: "This booking was cancelled." },
+  DECLINED: { title: "Not this time.", note: "Your barber can't take this one. Pick another time on their page." },
+  NO_SHOW: { title: "Missed.", note: "This booking was marked as a no-show." },
 } as const;
 
 export default async function BookingPage(props: PageProps<"/booking/[code]">) {
@@ -28,59 +27,69 @@ export default async function BookingPage(props: PageProps<"/booking/[code]">) {
 
   const copy = statusCopy[booking.status];
   const duration = Math.round((booking.endsAt.getTime() - booking.startsAt.getTime()) / 60_000);
-  const rows: Array<[string, string]> = [
-    ["Barber", booking.barber.displayName],
-    ["When", `${formatManilaDate(manilaDateOf(booking.startsAt))} · ${formatManilaTime(booking.startsAt)}`],
-    ["Cut", [booking.package.name, ...booking.addOns.map((a) => a.addOn.name)].join(" + ")],
-    ["Length", minutes(duration)],
-    ["Where", booking.locationType === "HOME" ? "Home service" : (booking.shop?.name ?? "Barber's spot")],
-  ];
+  const [clock, meridiem] = formatManilaTime(booking.startsAt).split(" ");
+  const where =
+    booking.locationType === "HOME" ? (booking.address ?? "Your place") : booking.shop ? `${booking.shop.name}, ${booking.shop.address}` : "The barber's chair";
 
   return (
-    <main className="mx-auto max-w-xl px-4 pb-20 pt-[max(1.25rem,env(safe-area-inset-top))]">
-      <TopBar back={`/${booking.barber.slug}`} />
+    <main className="mx-auto max-w-xl px-4 pb-20 pt-[max(1rem,env(safe-area-inset-top))]">
+      <TopBar back={`/${booking.barber.slug}`} backLabel={booking.barber.displayName} />
 
-      <section className="soft-card mt-8 p-6 text-center">
-        {booking.status === "PENDING" ? (
-          <Clock className="mx-auto text-oak" size={48} strokeWidth={1.5} />
-        ) : (
-          <CheckCircle2 className="mx-auto text-success" size={48} strokeWidth={1.5} />
-        )}
-        <h1 className="mt-4 text-4xl font-light">{copy.title}</h1>
-        <p className="mt-2 text-muted">{copy.note}</p>
-        <p className="mt-6 text-sm text-muted">Booking code</p>
-        <p className="font-display text-4xl tracking-[0.3em]">{booking.code}</p>
-      </section>
+      <h1 className="font-sign mt-8 text-[3rem] leading-none font-extrabold">{copy.title}</h1>
+      <p className="mt-2 text-ink-soft">{copy.note}</p>
 
-      <section className="wood mt-4 rounded-[2rem] p-6 text-cream">
-        <dl className="grid gap-4">
-          {rows.map(([label, value]) => (
-            <div key={label} className="flex items-start justify-between gap-4">
-              <dt className="text-cream-muted">{label}</dt>
-              <dd className="text-right">{value}</dd>
-            </div>
-          ))}
-        </dl>
-        <div className="mt-5 flex items-end justify-between border-t border-white/15 pt-4">
-          <span className="text-cream-muted">
-            {booking.depositCentavos > 0 ? `${peso(booking.depositCentavos)} due now` : "Pay at the shop"}
-          </span>
-          <span className="text-3xl">{peso(booking.priceCentavos)}</span>
+      <div className="ticket mt-6 rounded-lg">
+        <div className="flex items-end justify-between gap-4 px-5 pb-5 pt-5">
+          <div>
+            <p className="text-sm text-ink-soft">{formatManilaDate(manilaDateOf(booking.startsAt))}</p>
+            <p className="numeral text-[4.5rem] leading-[0.85] font-extrabold">
+              {clock}
+              <span className="ml-1 text-2xl font-bold">{meridiem}</span>
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-ink-soft">Booking code</p>
+            <p className="numeral text-[1.75rem] leading-none font-bold tracking-[0.12em]">{booking.code}</p>
+          </div>
         </div>
-      </section>
+        <div className="ticket-tear mx-4" />
+        <dl className="grid grid-cols-[6rem_1fr] gap-x-3 gap-y-2.5 px-5 py-5">
+          <dt className="text-ink-soft">Barber</dt>
+          <dd className="font-semibold">{booking.barber.displayName}</dd>
+          <dt className="text-ink-soft">Cut</dt>
+          <dd>
+            {[booking.package.name, ...booking.addOns.map((a) => a.addOn.name)].join(" + ")}, {minutes(duration)}
+          </dd>
+          <dt className="text-ink-soft">Where</dt>
+          <dd>{where}</dd>
+          <dt className="text-ink-soft">Total</dt>
+          <dd>
+            <span className="numeral text-2xl font-bold">{peso(booking.priceCentavos)}</span>
+            <span className="block text-sm text-ink-soft">
+              {booking.depositCentavos === 0
+                ? "Pay at the shop"
+                : booking.depositCentavos >= booking.priceCentavos
+                  ? "Paid by GCash before your cut"
+                  : `${peso(booking.depositCentavos)} by GCash now, the rest at the shop`}
+            </span>
+          </dd>
+        </dl>
+      </div>
 
       {booking.depositCentavos > 0 && booking.paymentStatus !== "PAID" && (
-        <p className="mt-4 rounded-3xl border border-dashed border-oak/50 bg-oak-pale/40 px-5 py-4 text-sm">
-          GCash checkout through PayMongo isn&apos;t connected yet. In development, this booking stays marked as payment
-          pending.
+        <p className="mt-4 rounded-lg border-[1.5px] border-dashed border-rule px-4 py-3 text-sm text-ink-soft">
+          GCash checkout isn&apos;t connected yet, so this booking is saved with payment pending.
         </p>
       )}
 
-      <div className="mt-6 flex flex-wrap justify-center gap-2">
-        <Link href={`/${booking.barber.slug}`} className="pill">
-          {booking.locationType === "HOME" ? <Home size={16} /> : <Store size={16} />} Back to {booking.barber.displayName}
+      <p className="mt-6 text-ink-soft">
+        Keep this page or your code. Show it at the shop if they ask.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <Link href={`/${booking.barber.slug}`} className="btn btn-quiet">
+          Book {booking.barber.displayName} again
         </Link>
-        <Link href="/" className="pill">
+        <Link href="/" className="btn btn-quiet">
           All barbers
         </Link>
       </div>

@@ -15,6 +15,8 @@ export interface DirectoryCard {
   shopSlug: string | null;
   area: string;
   distance: string | null;
+  /** Raw distance for sorting; null when no location was given. */
+  distanceKm: number | null;
   from: string | null;
   fromCentavos: number | null;
   next: string;
@@ -22,6 +24,9 @@ export interface DirectoryCard {
   nextDay: string;
   /** Epoch ms of the next opening, for sorting; null when booked up. */
   nextAt: number | null;
+  /** "3:30" and "PM", split so the time can be set large. */
+  nextClock: string | null;
+  nextMeridiem: string | null;
   openToday: boolean;
   homeService: boolean;
   instant: boolean;
@@ -83,11 +88,14 @@ export function toCard(entry: DirectoryEntry): DirectoryCard {
     shopSlug: entry.location?.shopSlug ?? null,
     area: entry.location?.label ?? "Davao",
     distance: entry.distanceKm != null ? formatDistance(entry.distanceKm) : null,
+    distanceKm: entry.distanceKm,
     from: entry.fromCentavos != null ? peso(entry.fromCentavos) : null,
     fromCentavos: entry.fromCentavos,
     next: next.text,
     nextDay: next.day,
     nextAt: entry.next?.slot.startsAt.getTime() ?? null,
+    nextClock: entry.next ? entry.next.slot.label.split(" ")[0] : null,
+    nextMeridiem: entry.next ? entry.next.slot.label.split(" ")[1] : null,
     openToday: next.today,
     homeService: barber.homeService,
     instant: barber.confirmMode === "INSTANT",
@@ -101,6 +109,7 @@ export function toCard(entry: DirectoryEntry): DirectoryCard {
  * barber, so a distance sort or soonest-opening sort carries over to shops.
  */
 export function toDirectory(entries: DirectoryEntry[]): Directory {
+  // Each group keeps barbers in the incoming order (distance or soonest opening).
   const shops = new Map<string, ShopCard>();
   const independents: DirectoryCard[] = [];
 

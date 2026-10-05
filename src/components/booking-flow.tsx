@@ -1,8 +1,8 @@
 "use client";
 
-import { Check, Home, LocateFixed, ShieldCheck, Store } from "lucide-react";
+import { Check, LocateFixed } from "lucide-react";
 import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
-import { peso, minutes } from "@/lib/money";
+import { minutes, peso } from "@/lib/money";
 import { createBooking, getSlots, type BookingState, type SlotResult } from "@/server/actions";
 
 interface Pkg {
@@ -34,7 +34,18 @@ interface Props {
   confirmMode: "INSTANT" | "REQUEST";
 }
 
-const sectionTitle = "page-display text-2xl";
+const radius = (factor: number) => ({ borderRadius: `calc(var(--page-radius) * ${factor})` });
+
+/** "₱150" → the peso sign small, the number large. */
+function Price({ centavos, plus = false }: { centavos: number; plus?: boolean }) {
+  const text = peso(centavos).replace("₱", "");
+  return (
+    <span className="numeral whitespace-nowrap">
+      <span className="text-[0.7em] font-semibold">{plus ? "+₱" : "₱"}</span>
+      <span className="font-bold">{text}</span>
+    </span>
+  );
+}
 
 export function BookingFlow(props: Props) {
   const [packageId, setPackageId] = useState(props.packages[0]?.id ?? "");
@@ -65,40 +76,62 @@ export function BookingFlow(props: Props) {
   const slot = result?.slots.find((s) => s.startsAt === startsAt);
   const dayLabel = props.dates.find((d) => d.iso === date)?.label;
 
+  // Group times into morning / afternoon / evening so a long day stays scannable.
+  const groups = useMemo(() => {
+    const out: Array<{ name: string; slots: NonNullable<typeof result>["slots"] }> = [];
+    for (const s of result?.slots ?? []) {
+      const [clock, meridiem] = s.label.split(" ");
+      const hour = Number(clock.split(":")[0]) % 12 + (meridiem === "PM" ? 12 : 0);
+      const name = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
+      if (out.at(-1)?.name !== name) out.push({ name, slots: [] });
+      out.at(-1)!.slots.push(s);
+    }
+    return out;
+  }, [result]);
+
   function toggleAddOn(id: string) {
     setAddOnIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
   }
 
   return (
     <>
-      <section className="page-card mt-5 p-5" aria-labelledby="choose-cut">
-        <h2 id="choose-cut" className={sectionTitle}>
-          Choose your cut
+      {/* The price board: painted on the barber's own board color (walnut by default). */}
+      <section aria-labelledby="cuts" className="mt-8 px-5 pb-5 pt-4" style={{ ...radius(1), background: "var(--page-ink)", color: "var(--page-on-ink)" }}>
+        <h2 id="cuts" className="page-display text-[1.75rem] font-bold">
+          Cuts
         </h2>
-        <div className="mt-4 grid gap-2" role="radiogroup" aria-labelledby="choose-cut">
+        <div role="radiogroup" aria-labelledby="cuts" className="mt-2">
           {props.packages.map((p) => {
-            const selected = p.id === packageId;
+            const on = p.id === packageId;
             return (
               <button
                 key={p.id}
                 type="button"
                 role="radio"
-                aria-checked={selected}
+                aria-checked={on}
                 onClick={() => setPackageId(p.id)}
-                className="flex items-center justify-between gap-3 border px-4 py-3.5 text-left transition-colors"
-                style={{
-                  borderRadius: "calc(var(--page-radius) * 0.6)",
-                  borderColor: selected ? "var(--page-accent)" : "var(--page-border)",
-                  boxShadow: selected ? "inset 0 0 0 1px var(--page-accent)" : undefined,
-                }}
+                className="-mx-2 flex w-[calc(100%+1rem)] items-start gap-3 px-2 py-3 text-left"
+                style={{ ...radius(0.5), background: on ? "rgb(255 255 255 / 0.1)" : "transparent" }}
               >
-                <span className="min-w-0">
-                  <span className="block">{p.name}</span>
-                  {p.description && <span className="block text-sm text-[var(--page-muted)]">{p.description}</span>}
+                <span
+                  aria-hidden
+                  className="mt-1.5 grid size-5 shrink-0 place-items-center rounded-full border-2"
+                  style={{ borderColor: on ? "var(--page-accent)" : "currentColor", background: on ? "var(--page-accent)" : "transparent", opacity: on ? 1 : 0.6 }}
+                >
+                  {on && <Check size={12} strokeWidth={3.5} style={{ color: "var(--page-on-accent)" }} />}
                 </span>
-                <span className="shrink-0 text-right text-sm">
-                  <span className="text-[var(--page-muted)]">{minutes(p.durationMin)}</span>
-                  <span className="ml-2 font-semibold">{peso(p.priceCentavos)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline gap-2">
+                    <span className="text-[1.0625rem] font-semibold">{p.name}</span>
+                    <span className="leader" />
+                    <span className="text-[1.6rem] leading-none">
+                      <Price centavos={p.priceCentavos} />
+                    </span>
+                  </span>
+                  <span className="mt-0.5 block text-sm opacity-80">
+                    {minutes(p.durationMin)}
+                    {p.description && `. ${p.description}`}
+                  </span>
                 </span>
               </button>
             );
@@ -107,26 +140,33 @@ export function BookingFlow(props: Props) {
 
         {props.addOns.length > 0 && (
           <>
-            <h3 className="mt-6 text-sm uppercase tracking-[0.18em] text-[var(--page-muted)]">Add-ons</h3>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <h3 className="mt-4 border-t border-current/20 pt-4 font-semibold">Add to it</h3>
+            <div className="mt-1">
               {props.addOns.map((a) => {
                 const on = addOnIds.includes(a.id);
                 return (
                   <button
                     key={a.id}
                     type="button"
-                    aria-pressed={on}
+                    role="checkbox"
+                    aria-checked={on}
                     onClick={() => toggleAddOn(a.id)}
-                    className="inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm"
-                    style={{
-                      borderColor: on ? "var(--page-accent)" : "var(--page-border)",
-                      background: on ? "var(--page-accent)" : "transparent",
-                      color: on ? "var(--page-on-accent)" : undefined,
-                    }}
+                    className="-mx-2 flex w-[calc(100%+1rem)] items-baseline gap-3 px-2 py-2.5 text-left"
+                    style={radius(0.5)}
                   >
-                    {on && <Check size={14} />}
-                    {a.name} +{peso(a.priceCentavos)}
-                    {a.durationMin > 0 && <span className="opacity-75">· {a.durationMin} min</span>}
+                    <span
+                      aria-hidden
+                      className="grid size-5 shrink-0 translate-y-1 place-items-center rounded border-2"
+                      style={{ borderColor: on ? "var(--page-accent)" : "currentColor", background: on ? "var(--page-accent)" : "transparent", opacity: on ? 1 : 0.6 }}
+                    >
+                      {on && <Check size={12} strokeWidth={3.5} style={{ color: "var(--page-on-accent)" }} />}
+                    </span>
+                    <span>{a.name}</span>
+                    <span className="text-sm opacity-75">{a.durationMin > 0 ? `${a.durationMin} min` : ""}</span>
+                    <span className="leader" />
+                    <span className="text-xl leading-none">
+                      <Price centavos={a.priceCentavos} plus />
+                    </span>
                   </button>
                 );
               })}
@@ -136,37 +176,43 @@ export function BookingFlow(props: Props) {
       </section>
 
       {props.homeService && props.hasShop && (
-        <section className="page-card mt-4 grid grid-cols-2 gap-1 p-1.5" aria-label="Where">
-          {(
-            [
-              ["SHOP", "At the shop", <Store key="s" size={16} />],
-              ["HOME", `Home service +${peso(props.homeFeeCentavos)}`, <Home key="h" size={16} />],
-            ] as const
-          ).map(([value, label, icon]) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={locationType === value}
-              onClick={() => setLocationType(value)}
-              className="inline-flex items-center justify-center gap-2 px-3 py-3 text-sm"
-              style={{
-                borderRadius: "calc(var(--page-radius) * 0.6)",
-                background: locationType === value ? "var(--page-ink)" : "transparent",
-                color: locationType === value ? "var(--page-on-ink)" : undefined,
-              }}
-            >
-              {icon}
-              {label}
-            </button>
-          ))}
-        </section>
+        <fieldset className="mt-6">
+          <legend className="font-semibold">Where</legend>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {(
+              [
+                ["SHOP", "At the shop"],
+                ["HOME", `Come to me, +${peso(props.homeFeeCentavos)}`],
+              ] as const
+            ).map(([value, label]) => {
+              const on = locationType === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setLocationType(value)}
+                  className="min-h-12 border-[1.5px] px-3 font-medium"
+                  style={{
+                    ...radius(0.6),
+                    borderColor: on ? "var(--page-text)" : "var(--page-border)",
+                    background: on ? "var(--page-text)" : "var(--page-surface)",
+                    color: on ? "var(--page-bg)" : "var(--page-text)",
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
       )}
 
-      <section className="page-card mt-4 p-5" aria-labelledby="pick-time">
-        <h2 id="pick-time" className={sectionTitle}>
-          Pick a time
+      <section aria-labelledby="when" className="mt-8">
+        <h2 id="when" className="page-display text-[1.75rem] font-bold">
+          When
         </h2>
-        <div className="-mx-1 mt-4 flex gap-2 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Day">
+        <div className="-mx-4 mt-3 flex gap-1 overflow-x-auto px-4 [scrollbar-width:none]" role="tablist" aria-label="Day">
           {props.dates.map((d) => {
             const on = d.iso === date;
             return (
@@ -177,48 +223,57 @@ export function BookingFlow(props: Props) {
                 aria-selected={on}
                 aria-label={d.label}
                 onClick={() => setDate(d.iso)}
-                className="flex w-16 shrink-0 flex-col items-center gap-0.5 border py-2.5"
+                className="flex min-w-[3.75rem] flex-col items-center px-2 pb-2 pt-1.5"
                 style={{
-                  borderRadius: "calc(var(--page-radius) * 0.6)",
-                  borderColor: on ? "var(--page-ink)" : "var(--page-border)",
-                  background: on ? "var(--page-ink)" : "transparent",
-                  color: on ? "var(--page-on-ink)" : undefined,
+                  ...radius(0.5),
+                  background: on ? "var(--page-text)" : "transparent",
+                  color: on ? "var(--page-bg)" : "var(--page-text)",
                 }}
               >
-                <span className="text-xs opacity-80">{d.weekday}</span>
-                <span className="page-display text-xl">{d.day}</span>
+                <span className="text-sm">{d.weekday}</span>
+                <span className="numeral text-[1.75rem] leading-none font-bold">{d.day}</span>
               </button>
             );
           })}
         </div>
 
-        <div className={`mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4 ${loading ? "opacity-50" : ""}`} aria-live="polite">
-          {result?.slots.map((s) => {
-            const on = s.startsAt === startsAt;
-            return (
-              <button
-                key={s.startsAt}
-                type="button"
-                aria-pressed={on}
-                onClick={() => {
-                  setStartsAt(s.startsAt);
-                  setCheckout(false);
-                }}
-                className="border py-2.5 text-sm"
-                style={{
-                  borderRadius: "calc(var(--page-radius) * 0.5)",
-                  borderColor: on ? "var(--page-accent)" : "var(--page-border)",
-                  background: on ? "var(--page-accent)" : "transparent",
-                  color: on ? "var(--page-on-accent)" : undefined,
-                }}
-              >
-                {s.label}
-              </button>
-            );
-          })}
+        <div className={`mt-4 min-h-24 ${loading ? "opacity-40" : ""}`} aria-live="polite" aria-busy={loading}>
+          {groups.map((group) => (
+            <div key={group.name} className="mt-4 first:mt-0">
+              <h3 className="text-sm font-medium text-[var(--page-muted)]">{group.name}</h3>
+              <div className="mt-1.5 grid grid-cols-4 gap-1.5">
+                {group.slots.map((s) => {
+                  const on = s.startsAt === startsAt;
+                  const [clock, meridiem] = s.label.split(" ");
+                  return (
+                    <button
+                      key={s.startsAt}
+                      type="button"
+                      aria-pressed={on}
+                      aria-label={s.label}
+                      onClick={() => {
+                        setStartsAt(s.startsAt);
+                        setCheckout(false);
+                      }}
+                      className="numeral flex min-h-12 items-baseline justify-center gap-0.5 border-[1.5px] text-[1.375rem] font-bold"
+                      style={{
+                        ...radius(0.5),
+                        borderColor: on ? "var(--page-accent)" : "var(--page-border)",
+                        background: on ? "var(--page-accent)" : "var(--page-surface)",
+                        color: on ? "var(--page-on-accent)" : "var(--page-text)",
+                      }}
+                    >
+                      {clock}
+                      <span className="text-xs font-semibold">{meridiem}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
           {result && result.slots.length === 0 && (
-            <p className="col-span-full py-4 text-sm text-[var(--page-muted)]">
-              No openings for a {minutes(duration)} booking that day. Try another day or a shorter package.
+            <p className="py-3 text-[var(--page-muted)]">
+              No {minutes(duration)} openings on {dayLabel}. Try another day, or pick a shorter cut.
             </p>
           )}
         </div>
@@ -232,29 +287,26 @@ export function BookingFlow(props: Props) {
           locationType={locationType}
           date={date}
           startsAt={slot.startsAt}
-          summary={`${pkg.name}${chosenAddOns.length ? ` + ${chosenAddOns.map((a) => a.name).join(", ")}` : ""}`}
-          when={`${dayLabel} · ${slot.label}`}
+          summary={[pkg.name, ...chosenAddOns.map((a) => a.name)].join(" + ")}
+          day={dayLabel ?? ""}
+          time={slot.label}
+          duration={duration}
           total={total}
         />
       )}
 
       {!checkout && (
-        <div className="fixed inset-x-0 bottom-0 z-10 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <div className="page-ink mx-auto flex max-w-xl items-center justify-between gap-3 p-4 shadow-2xl">
+        <div className="fixed inset-x-0 bottom-0 z-10 border-t border-ink/15 bg-paper/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-ink backdrop-blur">
+          <div className="mx-auto flex max-w-xl items-center justify-between gap-4">
             <div className="min-w-0">
-              <p className="truncate text-sm opacity-80">
-                {pkg?.name ?? "Choose a cut"} · {minutes(duration)}
-                {slot ? ` · ${slot.label}` : ""}
+              <p className="numeral text-[1.875rem] leading-none font-bold">
+                <Price centavos={total} />
               </p>
-              <p className="page-display text-2xl">{peso(total)}</p>
+              <p className="mt-1 truncate text-sm text-ink-soft">
+                {slot ? `${dayLabel}, ${slot.label}` : `${pkg?.name ?? "Pick a cut"}, ${minutes(duration)}`}
+              </p>
             </div>
-            <button
-              type="button"
-              disabled={!slot}
-              onClick={() => setCheckout(true)}
-              className="shrink-0 rounded-full px-6 py-3.5 font-medium disabled:opacity-50"
-              style={{ background: "var(--page-accent)", color: "var(--page-on-accent)" }}
-            >
+            <button type="button" disabled={!slot} onClick={() => setCheckout(true)} className="btn btn-ink min-w-36 shrink-0">
               {slot ? "Continue" : "Pick a time"}
             </button>
           </div>
@@ -276,7 +328,9 @@ function Checkout(
     date: string;
     startsAt: string;
     summary: string;
-    when: string;
+    day: string;
+    time: string;
+    duration: number;
     total: number;
   },
 ) {
@@ -284,50 +338,56 @@ function Checkout(
   const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
   const [pinStatus, setPinStatus] = useState("");
 
-  const payNow = useMemo(() => {
-    if (props.paymentMode === "FULL") return props.total;
-    if (props.paymentMode === "DEPOSIT") return Math.min(props.depositCentavos, props.total);
-    return 0;
-  }, [props.paymentMode, props.depositCentavos, props.total]);
+  const payNow =
+    props.paymentMode === "FULL" ? props.total : props.paymentMode === "DEPOSIT" ? Math.min(props.depositCentavos, props.total) : 0;
+  const [clock, meridiem] = props.time.split(" ");
 
   function dropPin() {
-    if (!("geolocation" in navigator)) return setPinStatus("Location isn't available on this device.");
+    if (!("geolocation" in navigator)) return setPinStatus("This device can't share a location. The address is enough.");
     setPinStatus("Finding you…");
     navigator.geolocation.getCurrentPosition(
       (p) => {
         setPin({ lat: p.coords.latitude, lng: p.coords.longitude });
-        setPinStatus("Pin added. It's saved on this booking only and shown only to your barber.");
+        setPinStatus("Pin added. Only your barber sees it, and only for this booking.");
       },
-      () => setPinStatus("Couldn't get your location. The address is enough."),
+      () => setPinStatus("Couldn't find your location. The address is enough."),
       { enableHighAccuracy: true, timeout: 10_000 },
     );
   }
 
-  const field =
-    "mt-1.5 w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-ink placeholder:text-muted/70 focus:border-oak focus:outline-none";
-
   return (
-    <section className="soft-card mt-4 p-5 text-ink" style={{ fontFamily: "var(--font-outfit)" }} aria-labelledby="checkout">
-      <div className="flex items-center justify-between gap-3">
-        <h2 id="checkout" className="text-2xl font-light">
-          Checkout
-        </h2>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-1.5 text-xs text-muted">
-          <ShieldCheck size={14} /> Handled by Kliper
-        </span>
-      </div>
+    <section aria-labelledby="checkout" className="mt-10 rounded-xl bg-plaster px-4 pb-6 pt-5 font-sans text-ink shadow-[0_0_0_1.5px_var(--color-rule)]">
+      <h2 id="checkout" className="font-sign text-[1.75rem] font-bold">
+        Your booking
+      </h2>
 
-      <div className="wood mt-4 rounded-3xl p-4 text-cream">
-        <p className="text-sm text-cream-muted">{props.barberName}</p>
-        <p className="mt-1">{props.summary}</p>
-        <p className="text-sm text-cream-muted">{props.when}</p>
-        <div className="mt-3 flex items-end justify-between border-t border-white/15 pt-3">
-          <span className="text-sm text-cream-muted">{payNow > 0 ? `Pay now ${peso(payNow)}` : "Pay at the shop"}</span>
-          <span className="text-2xl">{peso(props.total)}</span>
+      <div className="ticket mt-3 rounded-lg">
+        <div className="flex items-end justify-between gap-4 px-5 pb-4 pt-5">
+          <div className="min-w-0">
+            <p className="font-semibold">{props.barberName}</p>
+            <p className="text-sm text-ink-soft">{props.summary}</p>
+            <p className="text-sm text-ink-soft">
+              {props.day}, {minutes(props.duration)}
+              {props.locationType === "HOME" ? ", at your place" : ""}
+            </p>
+          </div>
+          <p className="numeral shrink-0 text-right text-[2.75rem] leading-[0.85] font-extrabold">
+            {clock}
+            <span className="block text-base font-bold">{meridiem}</span>
+          </p>
+        </div>
+        <div className="ticket-tear mx-4" />
+        <div className="flex items-center justify-between px-5 py-4">
+          <span className="text-sm text-ink-soft">
+            {payNow === 0 ? "Pay at the shop" : payNow === props.total ? "Pay now with GCash" : `${peso(payNow)} now with GCash, the rest at the shop`}
+          </span>
+          <span className="numeral text-[1.75rem] leading-none font-bold">
+            <Price centavos={props.total} />
+          </span>
         </div>
       </div>
 
-      <form action={action} className="mt-5 grid gap-4">
+      <form action={action} className="mt-6 grid gap-4">
         <input type="hidden" name="slug" value={props.slug} />
         <input type="hidden" name="packageId" value={props.packageId} />
         {props.addOnIds.map((id) => (
@@ -343,56 +403,53 @@ function Checkout(
           </>
         )}
 
-        <label className="text-sm text-muted">
+        <label className="block font-medium">
           Your name
-          <input name="name" required autoComplete="given-name" className={field} placeholder="Juan" />
+          <input name="name" required autoComplete="given-name" className="field" />
         </label>
-        <label className="text-sm text-muted">
+        <label className="block font-medium">
           Mobile number
-          <input name="phone" required inputMode="tel" autoComplete="tel" className={field} placeholder="0917 123 4567" />
+          <input name="phone" required inputMode="tel" autoComplete="tel" className="field" placeholder="0917 123 4567" />
+          <span className="mt-1 block text-sm font-normal text-ink-soft">We text your confirmation and a reminder here.</span>
         </label>
 
         {props.locationType === "HOME" && (
           <div>
-            <label className="text-sm text-muted">
+            <label className="block font-medium">
               Address for the home visit
-              <input name="address" required autoComplete="street-address" className={field} placeholder="House no., street, barangay" />
+              <input name="address" required autoComplete="street-address" className="field" placeholder="House number, street, barangay" />
             </label>
-            <button type="button" onClick={dropPin} className="pill mt-2 text-sm">
-              <LocateFixed size={14} /> Add a map pin
+            <button type="button" onClick={dropPin} className="mt-2 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold underline underline-offset-4">
+              <LocateFixed size={16} aria-hidden /> Add a map pin
             </button>
-            {pinStatus && <p className="mt-1.5 text-sm text-muted">{pinStatus}</p>}
+            {pinStatus && <p className="text-sm text-ink-soft">{pinStatus}</p>}
           </div>
         )}
 
-        <label className="text-sm text-muted">
-          Note for your barber <span className="text-muted/70">(optional)</span>
-          <textarea name="note" rows={2} className={field} placeholder="Low fade, keep the top long" />
+        <label className="block font-medium">
+          Anything your barber should know? <span className="font-normal text-ink-soft">Optional</span>
+          <textarea name="note" rows={2} className="field" placeholder="Low fade, keep the top long" />
         </label>
 
         {state.error && (
-          <p role="alert" className="rounded-2xl bg-danger/10 px-4 py-3 text-sm text-danger">
+          <p role="alert" className="rounded-lg border-[1.5px] border-pole-red bg-paper px-4 py-3 text-pole-red">
             {state.error}
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="wood rounded-full px-6 py-4 text-cream disabled:opacity-60"
-        >
+        <button type="submit" disabled={submitting} className="btn btn-ink min-h-14 w-full text-[1.0625rem]">
           {submitting
             ? "Booking…"
             : props.confirmMode === "REQUEST"
               ? "Send booking request"
               : payNow > 0
-                ? `Book · ${peso(payNow)} due now`
-                : "Confirm booking"}
+                ? `Book and pay ${peso(payNow)}`
+                : "Book this time"}
         </button>
-        <p className="text-center text-xs text-muted">
+        <p className="text-center text-sm text-ink-soft">
           {props.confirmMode === "REQUEST"
-            ? `${props.barberName} confirms each booking. You'll get an SMS when they do.`
-            : "You'll get an SMS confirmation and a reminder before your cut."}
+            ? `${props.barberName} accepts each booking personally. We'll text you when they do.`
+            : "Your chair is held the moment you book."}
         </p>
       </form>
     </section>

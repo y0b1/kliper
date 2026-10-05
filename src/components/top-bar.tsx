@@ -4,26 +4,28 @@ import type { ReactNode } from "react";
 
 export function Wordmark({ className = "" }: { className?: string }) {
   return (
-    <span className={`font-display text-xl font-semibold uppercase tracking-[0.18em] ${className}`}>
-      Kliper<span className="text-oak">.ph</span>
+    <span className={`inline-flex flex-col ${className}`}>
+      <span className="font-sign text-[1.7rem] leading-none font-extrabold tracking-[0.02em]">Kliper</span>
+      <span className="pole mt-1" aria-hidden />
     </span>
   );
 }
 
-/** The reference UI's header: a round back button on the left, pills on the right. */
-export function TopBar({ back, children }: { back?: string; children?: ReactNode }) {
+/** Wordmark (or a back link) on the left, a couple of plain links on the right. */
+export function TopBar({ back, backLabel = "Back", children }: { back?: string; backLabel?: string; children?: ReactNode }) {
   return (
-    <header className="flex items-center justify-between gap-3">
+    <header className="flex min-h-12 items-center justify-between gap-3">
       {back ? (
-        <Link href={back} className="round-button" aria-label="Back">
-          <ArrowLeft size={20} strokeWidth={1.75} />
+        <Link href={back} className="-ml-2 inline-flex min-h-11 items-center gap-1.5 rounded-md px-2 font-medium">
+          <ArrowLeft size={20} strokeWidth={2} aria-hidden />
+          {backLabel}
         </Link>
       ) : (
-        <Link href="/" aria-label="Kliper home" className="pl-1">
+        <Link href="/" aria-label="Kliper home">
           <Wordmark />
         </Link>
       )}
-      <nav className="flex items-center gap-2">{children}</nav>
+      <nav className="flex items-center gap-4 text-[0.9375rem] font-medium">{children}</nav>
     </header>
   );
 }

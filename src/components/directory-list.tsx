@@ -1,11 +1,12 @@
 "use client";
 
-import { LocateFixed, MapPin } from "lucide-react";
+import { LocateFixed } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { searchNearby } from "@/server/actions";
-import type { Directory } from "@/server/directory";
-import { BarberCard } from "./barber-card";
-import { ShopCard } from "./shop-card";
+import type { Directory, DirectoryCard } from "@/server/directory";
+import { BarberRow } from "./barber-row";
+import { ShopBlock } from "./shop-sign";
 
 /** Neighborhood centers, for visitors planning ahead or who'd rather not share a location. */
 const AREAS = [
@@ -20,6 +21,33 @@ const AREAS = [
 type Filter = "all" | "today" | "home";
 type Status = "idle" | "locating" | "denied" | "unavailable";
 
+/** The hero: today's soonest free chairs, times set large. */
+function NextChairs({ cards }: { cards: DirectoryCard[] }) {
+  if (cards.length === 0) {
+    return <p className="mt-3 text-ink-soft">No chairs left today. Tomorrow&apos;s openings are listed below.</p>;
+  }
+  return (
+    <ol className="-mx-4 mt-3 flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none]">
+      {cards.map((card) => (
+        <li key={card.slug} className="snap-start">
+          <Link
+            href={`/${card.slug}`}
+            className="flex w-40 flex-col rounded-lg border-[1.5px] border-ink bg-paper px-4 pb-3.5 pt-3 transition-transform active:translate-y-px"
+          >
+            <span className="numeral text-[3.25rem] leading-[0.95] font-extrabold">{card.nextClock}</span>
+            <span className="numeral text-lg font-bold leading-none">{card.nextMeridiem}</span>
+            <span className="mt-3 truncate font-semibold">{card.name}</span>
+            <span className="truncate text-sm text-ink-soft">
+              {card.shopName ?? (card.homeService ? "Home service" : card.area)}
+              {card.distance && `, ${card.distance}`}
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export function DirectoryList({ initial }: { initial: Directory }) {
   const [directory, setDirectory] = useState(initial);
   const [sortedBy, setSortedBy] = useState<string | null>(null);
@@ -27,11 +55,23 @@ export function DirectoryList({ initial }: { initial: Directory }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [pending, startTransition] = useTransition();
 
+  const everyone = useMemo(
+    () => [...directory.shops.flatMap((s) => s.barbers), ...directory.independents],
+    [directory],
+  );
+
+  const nextChairs = useMemo(() => {
+    const today = everyone.filter((c) => c.openToday && c.nextAt != null);
+    // Near someone: closest first (the server's order). Otherwise: soonest first.
+    if (sortedBy) {
+      return [...today].sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity)).slice(0, 8);
+    }
+    return [...today].sort((a, b) => a.nextAt! - b.nextAt!).slice(0, 8);
+  }, [everyone, sortedBy]);
+
   const shown = useMemo(() => {
-    const keep = (b: { openToday: boolean; homeService: boolean }) =>
-      filter === "today" ? b.openToday : filter === "home" ? b.homeService : true;
+    const keep = (b: DirectoryCard) => (filter === "today" ? b.openToday : filter === "home" ? b.homeService : true);
     return {
-      // A shop stays listed when at least one of its barbers matches; only matching barbers show inside it.
       shops: directory.shops
         .map((shop) => ({ ...shop, barbers: shop.barbers.filter(keep) }))
         .filter((shop) => shop.barbers.length > 0),
@@ -47,15 +87,12 @@ export function DirectoryList({ initial }: { initial: Directory }) {
   }
 
   function locateMe() {
-    if (!("geolocation" in navigator)) {
-      setStatus("unavailable");
-      return;
-    }
+    if (!("geolocation" in navigator)) return setStatus("unavailable");
     setStatus("locating");
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setStatus("idle");
-        // Sent once in the action's request body; not put in the URL and not stored.
+        // Sent once in the action's request body; never put in the URL or stored.
         sortFrom({ lat: position.coords.latitude, lng: position.coords.longitude }, "you");
       },
       (error) => setStatus(error.code === error.PERMISSION_DENIED ? "denied" : "unavailable"),
@@ -63,61 +100,53 @@ export function DirectoryList({ initial }: { initial: Directory }) {
     );
   }
 
+  const sortNote = pending
+    ? "Sorting…"
+    : status === "denied"
+      ? "Location is blocked for this site. Pick an area instead."
+      : status === "unavailable"
+        ? "Couldn't find your location. Pick an area instead."
+        : sortedBy === "you"
+          ? "Closest to you first. Your location isn't saved."
+          : sortedBy
+            ? `Closest to ${sortedBy} first.`
+            : "Soonest opening first.";
+
   return (
     <>
-      <section className="soft-card mt-6 p-6" aria-labelledby="near-me">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 id="near-me" className="text-2xl font-light">
-              Near me
-            </h2>
-            <p className="mt-1 max-w-sm text-sm text-muted">
-              On the road, or just landed in Davao? Sort by distance. Your location is used for this search only and
-              isn&apos;t saved.
-            </p>
-          </div>
+      <div className="-mx-4 mt-6 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]" role="group" aria-label="Sort by distance from">
+        <button type="button" onClick={locateMe} disabled={pending} className="btn btn-ink shrink-0 rounded-full!">
+          <LocateFixed size={18} aria-hidden />
+          {status === "locating" ? "Finding you…" : "Near me"}
+        </button>
+        {AREAS.map((area) => (
           <button
+            key={area.name}
             type="button"
-            onClick={locateMe}
-            disabled={status === "locating" || pending}
-            className="grid size-12 shrink-0 place-items-center rounded-full bg-walnut text-cream disabled:opacity-60"
-            aria-label="Use my location"
+            className="chip"
+            aria-pressed={sortedBy === area.name}
+            onClick={() => sortFrom(area, area.name)}
+            disabled={pending}
           >
-            <LocateFixed size={20} strokeWidth={1.75} />
+            {area.name}
           </button>
-        </div>
+        ))}
+      </div>
+      <p className="mt-2 text-sm text-ink-soft" aria-live="polite">
+        {sortNote}
+      </p>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" onClick={locateMe} className="pill bg-walnut! text-cream!" disabled={pending}>
-            <MapPin size={16} strokeWidth={1.75} />
-            {status === "locating" ? "Finding you…" : "Use my location"}
-          </button>
-          {AREAS.map((area) => (
-            <button key={area.name} type="button" className="pill" onClick={() => sortFrom(area, area.name)} disabled={pending}>
-              {area.name}
-            </button>
-          ))}
-        </div>
-
-        <p className="mt-3 min-h-5 text-sm text-muted" aria-live="polite">
-          {pending
-            ? "Sorting…"
-            : status === "denied"
-              ? "Location is off for this site. Pick an area instead."
-              : status === "unavailable"
-                ? "Couldn't get your location. Pick an area instead."
-                : sortedBy === "you"
-                  ? "Sorted by distance from you."
-                  : sortedBy
-                    ? `Sorted by distance from ${sortedBy}.`
-                    : "Sorted by soonest opening."}
-        </p>
+      <section aria-labelledby="next-chairs" className={`mt-8 ${pending ? "opacity-50" : ""}`}>
+        <h2 id="next-chairs" className="text-xl font-semibold">
+          Free chairs today
+        </h2>
+        <NextChairs cards={nextChairs} />
       </section>
 
-      <div className="mt-6 flex items-center gap-2" role="tablist" aria-label="Filter barbers">
+      <div className="mt-8 flex gap-2" role="tablist" aria-label="Show">
         {(
           [
-            ["all", "All"],
+            ["all", "Everyone"],
             ["today", "Open today"],
             ["home", "Home service"],
           ] as const
@@ -125,46 +154,53 @@ export function DirectoryList({ initial }: { initial: Directory }) {
           <button
             key={value}
             role="tab"
-            aria-selected={filter === value}
             type="button"
+            aria-selected={filter === value}
             onClick={() => setFilter(value)}
-            className={`pill ${filter === value ? "bg-walnut! text-cream!" : ""}`}
+            className="chip"
           >
             {label}
           </button>
         ))}
       </div>
 
-      <div className={pending ? "opacity-60" : ""}>
+      <div className={pending ? "opacity-50" : ""}>
         {shown.shops.length > 0 && (
           <section aria-labelledby="shops" className="mt-6">
-            <h2 id="shops" className="flex items-baseline justify-between text-2xl font-light">
-              Barbershops <span className="text-sm text-muted">{shown.shops.length}</span>
+            <h2 id="shops" className="text-xl font-semibold">
+              Barbershops
             </h2>
-            <div className="mt-3 grid gap-4 md:grid-cols-2">
-              {shown.shops.map((shop, index) => (
-                <ShopCard key={shop.slug} shop={shop} highlight={index === 0} />
+            <div className="mt-3 grid gap-7 md:grid-cols-2 md:gap-x-8">
+              {shown.shops.map((shop) => (
+                <ShopBlock key={shop.slug} shop={shop} />
               ))}
             </div>
           </section>
         )}
 
         {shown.independents.length > 0 && (
-          <section aria-labelledby="independents" className="mt-8">
-            <h2 id="independents" className="flex items-baseline justify-between text-2xl font-light">
-              Independent barbers <span className="text-sm text-muted">{shown.independents.length}</span>
+          <section aria-labelledby="independents" className="mt-10">
+            <h2 id="independents" className="text-xl font-semibold">
+              Independent barbers
             </h2>
-            <p className="mt-1 text-sm text-muted">Solo chairs and home-service barbers.</p>
-            <div className="mt-3 grid gap-4 md:grid-cols-2">
+            <p className="text-sm text-ink-soft">Their own chair, or they come to you.</p>
+            <ul className="mt-2 divide-y divide-rule border-y border-rule px-1">
               {shown.independents.map((card) => (
-                <BarberCard key={card.slug} card={card} />
+                <li key={card.slug}>
+                  <BarberRow card={card} showPlace />
+                </li>
               ))}
-            </div>
+            </ul>
           </section>
         )}
 
         {shown.shops.length === 0 && shown.independents.length === 0 && (
-          <p className="soft-card mt-6 p-6 text-muted">No barbers match that filter yet.</p>
+          <p className="mt-6 rounded-lg border-[1.5px] border-dashed border-rule p-6 text-ink-soft">
+            Nobody matches that yet.{" "}
+            <button type="button" className="font-semibold text-ink underline" onClick={() => setFilter("all")}>
+              Show everyone
+            </button>
+          </p>
         )}
       </div>
     </>

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { CSSProperties } from "react";
-import { ArrowLeft, ChevronRight, Clock, Home, MapPin } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Wordmark } from "@/components/top-bar";
-import { minutes, peso } from "@/lib/money";
+import { peso } from "@/lib/money";
 import { resolveCardChrome, resolveTheme } from "@/lib/theme";
 import { addDays, formatManilaDate, formatMinuteOfDay, manilaDateOf, manilaWeekday } from "@/lib/time";
 import { getShopBySlug, nextOpening } from "@/server/barbers";
@@ -32,21 +32,22 @@ export default async function ShopPage(props: PageProps<"/shop/[slug]">) {
     shop.memberships.map(async ({ barber, role }) => {
       const next = await nextOpening(barber);
       const prices = barber.packages.map((p) => p.priceCentavos);
-      const durations = barber.packages.map((p) => p.durationMin);
       const day = !next
         ? null
         : next.date === today
-          ? "Today"
+          ? "today"
           : next.date === addDays(today, 1)
-            ? "Tomorrow"
+            ? "tomorrow"
             : formatManilaDate(next.date).split(",")[0];
+      const [clock, meridiem] = next ? next.slot.label.split(" ") : [null, null];
       return {
         barber,
-        role,
-        next: next && day ? `${day} ${next.slot.label}` : "None this week",
+        owner: role === "OWNER",
+        clock,
+        meridiem,
+        day,
         openToday: next?.date === today,
         from: prices.length ? peso(Math.min(...prices)) : null,
-        shortest: durations.length ? minutes(Math.min(...durations)) : null,
         chrome: resolveCardChrome(barber.themePreset, barber.themeTokens),
       };
     }),
@@ -54,87 +55,73 @@ export default async function ShopPage(props: PageProps<"/shop/[slug]">) {
 
   return (
     <div className="page-shell" style={theme.cssProperties as CSSProperties}>
-      <main className="mx-auto max-w-xl px-4 pb-16 pt-[max(1.25rem,env(safe-area-inset-top))] md:max-w-3xl">
-        <header className="flex items-center justify-between">
-          <Link
-            href="/"
-            aria-label="Back to all barbershops"
-            className="grid size-13 place-items-center rounded-full border border-[var(--page-border)] bg-[var(--page-surface)]"
-          >
-            <ArrowLeft size={20} strokeWidth={1.75} />
+      <main className="mx-auto max-w-xl px-4 pb-16 pt-[max(1rem,env(safe-area-inset-top))]">
+        <header className="flex min-h-12 items-center">
+          <Link href="/" className="-ml-2 inline-flex min-h-11 items-center gap-1.5 rounded-md px-2 font-medium">
+            <ArrowLeft size={20} strokeWidth={2} aria-hidden />
+            All barbers
           </Link>
-          <span className="rounded-full border border-[var(--page-border)] bg-[var(--page-surface)] px-4 py-2.5 text-sm">
-            {barbers.length} {barbers.length === 1 ? "barber" : "barbers"}
-          </span>
         </header>
 
-        <section className="page-ink mt-6 p-6">
-          <p className="text-sm uppercase tracking-[0.2em] opacity-75">Barbershop</p>
-          <h1 className="page-display mt-2 text-5xl leading-none">{shop.name}</h1>
-          <div className="mt-5 flex flex-wrap gap-2 text-sm">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5">
-              <MapPin size={14} /> {shop.address}
-              {shop.barangay ? "" : `, ${shop.city}`}
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5">
-              <Clock size={14} />
-              {hoursToday ? `Open today ${formatMinuteOfDay(hoursToday.openMin)}–${formatMinuteOfDay(hoursToday.closeMin)}` : "Closed today"}
-            </span>
-          </div>
-        </section>
+        <div className="sign-themed mt-8 px-5 pb-4 pt-5">
+          <h1 className="page-display text-[3rem] leading-[0.92] font-bold">{shop.name}</h1>
+        </div>
+        <p className="mt-4 font-medium">
+          {shop.address}
+          {shop.barangay ? "" : `, ${shop.city}`}
+        </p>
+        <p className="text-[var(--page-muted)]">
+          {hoursToday
+            ? `Open today from ${formatMinuteOfDay(hoursToday.openMin)} to ${formatMinuteOfDay(hoursToday.closeMin)}.`
+            : "Closed today."}
+        </p>
 
-        <h2 className="page-display mt-8 text-3xl">Choose your barber</h2>
-        <p className="mt-1 text-sm text-[var(--page-muted)]">Each barber sets their own cuts, prices and hours.</p>
+        <h2 className="page-display mt-10 text-[1.75rem] font-bold">Pick a barber</h2>
+        <p className="text-[var(--page-muted)]">Each barber sets their own cuts, prices and hours.</p>
 
-        <ul className="mt-4 grid gap-3 md:grid-cols-2">
-          {barbers.map(({ barber, role, next, openToday, from, shortest, chrome }) => (
-            <li key={barber.id}>
-              <Link href={`/${barber.slug}`} className="page-card group flex h-full flex-col gap-4 p-5">
-                <div className="flex items-center gap-3" style={chrome as CSSProperties}>
-                  <span
-                    aria-hidden
-                    className="grid size-14 shrink-0 place-items-center rounded-full text-lg"
-                    style={{ background: "var(--card-accent)", color: "var(--card-on-accent)", fontFamily: "var(--card-font-display)" }}
-                  >
-                    {initials(barber.displayName)}
+        <ul className="mt-3 divide-y" style={{ borderColor: "var(--page-border)" }}>
+          {barbers.map(({ barber, owner, clock, meridiem, day, openToday, from, chrome }) => (
+            <li key={barber.id} style={{ borderColor: "var(--page-border)" }}>
+              <Link href={`/${barber.slug}`} className="flex items-center gap-3 py-4">
+                <span
+                  aria-hidden
+                  className="grid size-12 shrink-0 place-items-center rounded-full font-semibold"
+                  style={{ ...(chrome as CSSProperties), background: "var(--card-accent)", color: "var(--card-on-accent)", fontFamily: "var(--card-font-display)" }}
+                >
+                  {initials(barber.displayName)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[1.0625rem] font-semibold">
+                    {barber.displayName}
+                    {owner && <span className="ml-2 text-sm font-normal text-[var(--page-muted)]">Owner</span>}
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-lg leading-tight">{barber.displayName}</p>
-                    <p className="truncate text-sm text-[var(--page-muted)]">
-                      {role === "OWNER" ? "Owner · " : ""}
-                      {barber.specialties.slice(0, 3).join(" · ")}
-                    </p>
-                  </div>
-                  <ChevronRight size={18} className="shrink-0 opacity-60 transition-transform group-hover:translate-x-0.5" />
-                </div>
-                <dl className="grid grid-cols-3 gap-3 text-sm">
-                  <div>
-                    <dt className="text-[var(--page-muted)]">From</dt>
-                    <dd className="mt-1">{from ?? "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-[var(--page-muted)]">Quickest</dt>
-                    <dd className="mt-1">{shortest ?? "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-[var(--page-muted)]">Next</dt>
-                    <dd className="mt-1 font-medium" style={openToday ? { color: "var(--page-accent)" } : undefined}>
-                      {next}
-                    </dd>
-                  </div>
-                </dl>
-                {barber.homeService && (
-                  <p className="inline-flex items-center gap-1.5 text-xs text-[var(--page-muted)]">
-                    <Home size={13} /> Also does home service
-                  </p>
-                )}
+                  <span className="block truncate text-sm text-[var(--page-muted)]">{barber.specialties.join(", ")}</span>
+                  {from && <span className="block text-sm text-[var(--page-muted)]">Cuts from {from}</span>}
+                </span>
+                <span className="shrink-0 text-right">
+                  {clock ? (
+                    <>
+                      <span className="numeral block text-[2rem] leading-none font-bold">
+                        {clock}
+                        <span className="ml-0.5 text-base font-semibold">{meridiem}</span>
+                      </span>
+                      <span className="text-sm" style={{ color: openToday ? "var(--page-accent)" : "var(--page-muted)" }}>
+                        {day}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-sm text-[var(--page-muted)]">Booked up</span>
+                  )}
+                </span>
               </Link>
             </li>
           ))}
         </ul>
 
-        <footer className="mt-10 flex items-center justify-center gap-2 text-sm opacity-70">
-          Booking by <Wordmark className="text-base" />
+        <footer className="mt-14 flex justify-center opacity-70">
+          <Link href="/" aria-label="Kliper home">
+            <Wordmark />
+          </Link>
         </footer>
       </main>
     </div>

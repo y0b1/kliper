@@ -57,6 +57,7 @@ export function presetIdOrDefault(value: unknown): ThemePresetId {
 }
 
 const fontVariable: Record<string, string> = {
+  "Big Shoulders Display": "var(--font-big-shoulders)",
   Outfit: "var(--font-outfit)",
   Oswald: "var(--font-oswald)",
   "Playfair Display": "var(--font-playfair)",

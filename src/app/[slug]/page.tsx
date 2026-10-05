@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { CSSProperties } from "react";
-import { ArrowLeft, Home, MapPin, Store } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { BookingFlow } from "@/components/booking-flow";
 import { Wordmark } from "@/components/top-bar";
 import { peso } from "@/lib/money";
@@ -19,6 +19,11 @@ export async function generateMetadata(props: PageProps<"/[slug]">): Promise<Met
   return { title: barber.displayName, description: barber.bio ?? `Book ${barber.displayName} on Kliper.` };
 }
 
+function joinWords(items: string[]) {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+}
+
 export default async function BarberPage(props: PageProps<"/[slug]">) {
   const { slug } = await props.params;
   const barber = await getBarberBySlug(slug);
@@ -30,70 +35,38 @@ export default async function BarberPage(props: PageProps<"/[slug]">) {
   const dates = Array.from({ length: 7 }, (_, i) => {
     const iso = addDays(today, i);
     const [weekday, rest] = formatManilaDate(iso).split(", ");
-    return { iso, weekday: i === 0 ? "Today" : i === 1 ? "Tmrw" : weekday, day: rest.split(" ")[1], label: formatManilaDate(iso) };
+    return { iso, weekday: i === 0 ? "Today" : weekday, day: rest.split(" ")[1], label: formatManilaDate(iso) };
   });
-  const initials = barber.displayName
-    .split(/\s+/)
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+
+  const where = location?.shopName
+    ? `Works at ${location.shopName}, ${location.label}.`
+    : location
+      ? `Independent barber in ${location.label}.`
+      : "Independent barber.";
+  const home = barber.homeService
+    ? ` Comes to you within ${barber.serviceRadiusKm} km${barber.homeFeeCentavos ? ` for ${peso(barber.homeFeeCentavos)} extra` : ""}.`
+    : "";
 
   return (
     <div className="page-shell" style={theme.cssProperties as CSSProperties}>
-      <main className="mx-auto max-w-xl px-4 pb-40 pt-[max(1.25rem,env(safe-area-inset-top))]">
-        <header className="flex items-center justify-between">
+      <main className="mx-auto max-w-xl px-4 pb-44 pt-[max(1rem,env(safe-area-inset-top))]">
+        <header className="flex min-h-12 items-center justify-between">
           <Link
             href={location?.shopSlug ? `/shop/${location.shopSlug}` : "/"}
-            aria-label={location?.shopName ? `Back to ${location.shopName}` : "Back to all barbershops"}
-            className="grid size-13 place-items-center rounded-full border border-[var(--page-border)] bg-[var(--page-surface)]"
+            className="-ml-2 inline-flex min-h-11 items-center gap-1.5 rounded-md px-2 font-medium"
           >
-            <ArrowLeft size={20} strokeWidth={1.75} />
+            <ArrowLeft size={20} strokeWidth={2} aria-hidden />
+            {location?.shopName ?? "All barbers"}
           </Link>
-          <span className="rounded-full border border-[var(--page-border)] bg-[var(--page-surface)] px-4 py-2.5 text-sm">
-            {theme.preset.name} theme
-          </span>
         </header>
 
-        <section className="page-ink mt-6 p-6">
-          {location?.shopName ? (
-            <Link
-              href={`/shop/${location.shopSlug}`}
-              className="mb-4 inline-flex items-center gap-1.5 text-sm uppercase tracking-[0.2em] opacity-80 hover:opacity-100"
-            >
-              <Store size={14} /> {location.shopName}
-            </Link>
-          ) : (
-            <p className="mb-4 text-sm uppercase tracking-[0.2em] opacity-80">Independent barber</p>
-          )}
-          <div className="flex items-center gap-4">
-            <span
-              aria-hidden
-              className="page-display grid size-20 shrink-0 place-items-center rounded-full text-2xl"
-              style={{ background: "var(--page-accent)", color: "var(--page-on-accent)" }}
-            >
-              {initials}
-            </span>
-            <div className="min-w-0">
-              <h1 className="page-display text-4xl leading-none">{barber.displayName}</h1>
-              <p className="mt-2 text-sm opacity-80">{barber.specialties.join(" · ")}</p>
-            </div>
-          </div>
-          {barber.bio && <p className="mt-5 leading-relaxed opacity-90">{barber.bio}</p>}
-          <div className="mt-5 flex flex-wrap gap-2 text-sm">
-            {location && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5">
-                <MapPin size={14} /> {location.label}
-              </span>
-            )}
-            {barber.homeService && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5">
-                <Home size={14} /> Home service · {barber.serviceRadiusKm} km
-                {barber.homeFeeCentavos ? ` · +${peso(barber.homeFeeCentavos)}` : ""}
-              </span>
-            )}
-          </div>
-        </section>
+        <h1 className="page-display mt-8 text-[3.5rem] leading-[0.92] font-bold break-words">{barber.displayName}</h1>
+        <p className="mt-3 text-[1.0625rem] font-medium">{joinWords(barber.specialties)}.</p>
+        <p className="mt-1 text-[var(--page-muted)]">
+          {where}
+          {home}
+        </p>
+        {barber.bio && <p className="mt-4 max-w-prose leading-relaxed">{barber.bio}</p>}
 
         <BookingFlow
           slug={barber.slug}
@@ -115,8 +88,10 @@ export default async function BarberPage(props: PageProps<"/[slug]">) {
           confirmMode={barber.confirmMode}
         />
 
-        <footer className="mt-10 flex items-center justify-center gap-2 text-sm opacity-70">
-          Booking by <Wordmark className="text-base" />
+        <footer className="mt-14 flex justify-center opacity-70">
+          <Link href="/" aria-label="Kliper home">
+            <Wordmark />
+          </Link>
         </footer>
       </main>
     </div>
